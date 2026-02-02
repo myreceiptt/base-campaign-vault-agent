@@ -42,5 +42,5 @@ npm run verify:vault
 
 ## Deployment record
 
-- Base Sepolia: `TBD`
-- Deploy tx: `TBD`
+- Base Sepolia: `0x316c82205681B098d6a6b6Ac1fa221074F62E2E3`
+- Deploy tx: `0x531a4e70a4475d3d48bedba8c0dfbcf535fa3ae6c82315c8034b0dac40bed61a`
