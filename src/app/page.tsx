@@ -1,15 +1,24 @@
+"use client";
+
+import { ConnectButton } from "@rainbow-me/rainbowkit";
+
 export default function Home() {
   return (
     <div className="min-h-screen bg-zinc-50 font-sans text-zinc-950 dark:bg-zinc-950 dark:text-zinc-50">
       <main className="mx-auto flex w-full max-w-5xl flex-col gap-10 px-6 py-16">
-        <header className="flex flex-col gap-3">
-          <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-            Base Campaign Vault Agent
-          </h1>
-          <p className="max-w-2xl text-base leading-7 text-zinc-600 dark:text-zinc-400">
-            AI campaign builder + USDC escrow onchain. Fokus: Base App
-            creators/brands.
-          </p>
+        <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex flex-col gap-3">
+            <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+              Base Campaign Vault Agent
+            </h1>
+            <p className="max-w-2xl text-base leading-7 text-zinc-600 dark:text-zinc-400">
+              AI campaign builder + USDC escrow onchain. Fokus: Base App
+              creators/brands.
+            </p>
+          </div>
+          <div className="pt-1">
+            <ConnectButton />
+          </div>
         </header>
 
         <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
