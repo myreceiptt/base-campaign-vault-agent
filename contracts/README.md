@@ -30,8 +30,17 @@ npm run deploy
 
 After deploy, set the frontend env var `NEXT_PUBLIC_VAULT` to the deployed address.
 
+## Verify (Base Sepolia)
+
+1) Set `BASESCAN_API_KEY` in `.env` (from BaseScan)
+2) Set `VAULT_ADDRESS` to the deployed contract address
+3) Run:
+
+```bash
+npm run verify:vault
+```
+
 ## Deployment record
 
 - Base Sepolia: `TBD`
 - Deploy tx: `TBD`
-
