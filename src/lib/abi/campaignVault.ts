@@ -1,0 +1,42 @@
+export const campaignVaultAbi = [
+  {
+    type: "function",
+    name: "createCampaign",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "publisher", type: "address" },
+      { name: "budget", type: "uint256" },
+      { name: "deadline", type: "uint64" },
+      { name: "metadataHash", type: "bytes32" },
+    ],
+    outputs: [{ name: "campaignId", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "deposit",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "campaignId", type: "uint256" }],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "release",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "campaignId", type: "uint256" }],
+    outputs: [],
+  },
+  {
+    type: "event",
+    name: "CampaignCreated",
+    inputs: [
+      { name: "campaignId", type: "uint256", indexed: true },
+      { name: "advertiser", type: "address", indexed: true },
+      { name: "publisher", type: "address", indexed: true },
+      { name: "budget", type: "uint256", indexed: false },
+      { name: "deadline", type: "uint64", indexed: false },
+      { name: "metadataHash", type: "bytes32", indexed: false },
+    ],
+    anonymous: false,
+  },
+] as const;
+
