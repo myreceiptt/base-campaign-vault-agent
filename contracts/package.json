@@ -1,0 +1,26 @@
+{
+  "name": "base-campaign-vault-agent-contracts",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "build": "hardhat compile",
+    "test": "hardhat test",
+    "deploy": "hardhat run scripts/deploy.ts --network baseSepolia",
+    "verify": "hardhat verify --network baseSepolia"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^6.1.0",
+    "dotenv": "^16.4.7",
+    "hardhat": "2.28.4",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.0"
+  },
+  "private": true,
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.0.2"
+  }
+}
