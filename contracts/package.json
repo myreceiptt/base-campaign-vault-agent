@@ -6,7 +6,8 @@
     "build": "hardhat compile",
     "test": "hardhat test",
     "deploy": "hardhat run scripts/deploy.ts --network baseSepolia",
-    "verify": "hardhat verify --network baseSepolia"
+    "verify": "hardhat verify --network baseSepolia",
+    "verify:vault": "hardhat run scripts/verify-vault.ts --network baseSepolia"
   },
   "keywords": [],
   "author": "",
