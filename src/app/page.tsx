@@ -51,6 +51,10 @@ export default function Home() {
   const [budgetNotes, setBudgetNotes] = useState("");
   const [isGeneratingBrief, setIsGeneratingBrief] = useState(false);
   const [briefError, setBriefError] = useState<string | null>(null);
+  const [lockedMetadataHash, setLockedMetadataHash] = useState<`0x${string}` | null>(
+    null,
+  );
+  const [lockedCanonicalJson, setLockedCanonicalJson] = useState<string | null>(null);
 
   const [budgetUsdc, setBudgetUsdc] = useState("");
   const [publisher, setPublisher] = useState("");
@@ -93,10 +97,15 @@ export default function Home() {
     return stableStringify(currentBriefPayload);
   }, [currentBriefPayload]);
 
-  const metadataHash = useMemo(() => {
-    if (!objective) return null;
+  const currentMetadataHash = useMemo(() => {
+    if (!objective.trim()) return null;
     return keccak256(toHex(canonicalBriefJson));
   }, [objective, canonicalBriefJson]);
+
+  const isDirtySinceLock = useMemo(() => {
+    if (!lockedMetadataHash) return false;
+    return lockedMetadataHash !== currentMetadataHash;
+  }, [lockedMetadataHash, currentMetadataHash]);
 
   const allowanceEnabled = Boolean(isConnected && address && vaultAddress);
   const allowanceArgs = allowanceEnabled
@@ -181,11 +190,27 @@ export default function Home() {
     }
   }
 
+  function onLockToHash() {
+    setBriefError(null);
+    if (!objective.trim()) {
+      setBriefError("Objective is required before locking.");
+      return;
+    }
+    if (!currentMetadataHash) {
+      setBriefError("Unable to compute metadataHash.");
+      return;
+    }
+
+    setLockedMetadataHash(currentMetadataHash);
+    setLockedCanonicalJson(canonicalBriefJson);
+  }
+
   async function onCreateCampaign() {
     if (!vaultAddress) return;
     if (!isAddress(publisher)) throw new Error("Invalid publisher address");
     if (!budgetUnits) throw new Error("Invalid budget");
-    if (!metadataHash) throw new Error("Objective required (for metadataHash)");
+    if (!lockedMetadataHash) throw new Error("Lock your AI brief to a hash first.");
+    if (isDirtySinceLock) throw new Error("Brief changed since lock. Lock again.");
 
     const days = Number(deadlineDays);
     if (!Number.isFinite(days) || days <= 0) throw new Error("Invalid deadline days");
@@ -196,7 +221,7 @@ export default function Home() {
       address: vaultAddress,
       abi: campaignVaultAbi,
       functionName: "createCampaign",
-      args: [publisher, budgetUnits, deadline, metadataHash],
+      args: [publisher, budgetUnits, deadline, lockedMetadataHash],
       chainId: BASE_SEPOLIA_CHAIN_ID,
     });
   }
@@ -332,14 +357,24 @@ export default function Home() {
                 `metadataHash`.
               </p>
             </div>
-            <button
-              type="button"
-              className="h-10 rounded-xl bg-zinc-900 px-4 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-white"
-              disabled={isGeneratingBrief || !objective.trim()}
-              onClick={() => void onGenerateBrief()}
-            >
-              {isGeneratingBrief ? "Generating…" : "Generate Brief"}
-            </button>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className="h-10 rounded-xl bg-zinc-900 px-4 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-white"
+                disabled={isGeneratingBrief || !objective.trim()}
+                onClick={() => void onGenerateBrief()}
+              >
+                {isGeneratingBrief ? "Generating…" : "Generate Brief"}
+              </button>
+              <button
+                type="button"
+                className="h-10 rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-900 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50 dark:hover:bg-zinc-800"
+                disabled={!currentMetadataHash}
+                onClick={onLockToHash}
+              >
+                Lock to Hash
+              </button>
+            </div>
           </div>
 
           {briefError ? (
@@ -390,6 +425,32 @@ export default function Home() {
                 placeholder="Add a don't…"
               />
             </div>
+          </div>
+
+          <div className="mt-6 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="text-sm font-medium">metadataHash (locked)</div>
+              <div className="text-xs text-zinc-600 dark:text-zinc-400">
+                {lockedMetadataHash
+                  ? isDirtySinceLock
+                    ? "Edited since lock — lock again before signing."
+                    : "Ready to sign."
+                  : "Not locked yet."}
+              </div>
+            </div>
+            <div className="mt-2 font-mono text-xs text-zinc-700 dark:text-zinc-300">
+              {lockedMetadataHash ?? "—"}
+            </div>
+            {lockedCanonicalJson ? (
+              <details className="mt-3">
+                <summary className="cursor-pointer text-sm text-zinc-600 dark:text-zinc-400">
+                  View canonical JSON (locked)
+                </summary>
+                <pre className="mt-2 max-h-64 overflow-auto rounded-xl border border-zinc-200 bg-white p-3 text-xs text-zinc-800 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100">
+                  {lockedCanonicalJson}
+                </pre>
+              </details>
+            ) : null}
           </div>
         </section>
 
@@ -458,7 +519,7 @@ export default function Home() {
               <div className="text-sm text-zinc-600 dark:text-zinc-400">
                 metadataHash:{" "}
                 <span className="font-mono text-xs">
-                  {metadataHash ?? "—"}
+                  {lockedMetadataHash ?? "lock in Step 1"}
                 </span>
               </div>
             </div>
@@ -467,7 +528,7 @@ export default function Home() {
           <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <ActionButton
               label="Create campaign"
-              disabled={!canTransact}
+              disabled={!canTransact || !lockedMetadataHash || isDirtySinceLock}
               busy={isPending}
               onClick={onCreateCampaign}
             />
