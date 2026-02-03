@@ -22,6 +22,16 @@ import { baseSepolia } from "wagmi/chains";
 import { campaignVaultAbi } from "@/lib/abi/campaignVault";
 import { erc20Abi } from "@/lib/abi/erc20";
 import { BASE_SEPOLIA_CHAIN_ID, getExplorerTxUrl } from "@/lib/onchain";
+import type { Json } from "@/lib/stableJson";
+import { stableStringify } from "@/lib/stableJson";
+
+type BriefResponse = {
+  brief: string;
+  deliverables: string[];
+  do: string[];
+  dont: string[];
+  budgetNotes?: string;
+};
 
 export default function Home() {
   const { address, isConnected } = useAccount();
@@ -29,6 +39,19 @@ export default function Home() {
   const { switchChain, isPending: isSwitching } = useSwitchChain();
 
   const [objective, setObjective] = useState("");
+  const [audience, setAudience] = useState("");
+  const [tone, setTone] = useState("");
+  const [cta, setCta] = useState("");
+  const [constraints, setConstraints] = useState("");
+
+  const [aiBrief, setAiBrief] = useState("");
+  const [deliverables, setDeliverables] = useState<string[]>([]);
+  const [dos, setDos] = useState<string[]>([]);
+  const [donts, setDonts] = useState<string[]>([]);
+  const [budgetNotes, setBudgetNotes] = useState("");
+  const [isGeneratingBrief, setIsGeneratingBrief] = useState(false);
+  const [briefError, setBriefError] = useState<string | null>(null);
+
   const [budgetUsdc, setBudgetUsdc] = useState("");
   const [publisher, setPublisher] = useState("");
   const [deadlineDays, setDeadlineDays] = useState("7");
@@ -50,10 +73,30 @@ export default function Home() {
     }
   }, [budgetUsdc]);
 
+  const currentBriefPayload = useMemo(() => {
+    const payload: Record<string, Json> = {
+      objective,
+      audience,
+      tone,
+      cta,
+      constraints,
+      brief: aiBrief,
+      deliverables,
+      do: dos,
+      dont: donts,
+    };
+    if (budgetNotes.trim()) payload.budgetNotes = budgetNotes.trim();
+    return payload;
+  }, [objective, audience, tone, cta, constraints, aiBrief, deliverables, dos, donts, budgetNotes]);
+
+  const canonicalBriefJson = useMemo(() => {
+    return stableStringify(currentBriefPayload);
+  }, [currentBriefPayload]);
+
   const metadataHash = useMemo(() => {
     if (!objective) return null;
-    return keccak256(toHex(objective));
-  }, [objective]);
+    return keccak256(toHex(canonicalBriefJson));
+  }, [objective, canonicalBriefJson]);
 
   const allowanceEnabled = Boolean(isConnected && address && vaultAddress);
   const allowanceArgs = allowanceEnabled
@@ -98,6 +141,45 @@ export default function Home() {
 
   const wrongChain = chainId !== BASE_SEPOLIA_CHAIN_ID;
   const canTransact = isConnected && !wrongChain && Boolean(vaultAddress);
+
+  async function onGenerateBrief() {
+    setBriefError(null);
+    if (!objective.trim()) {
+      setBriefError("Objective is required.");
+      return;
+    }
+
+    setIsGeneratingBrief(true);
+    try {
+      const res = await fetch("/api/brief", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          objective,
+          audience,
+          tone,
+          cta,
+          constraints,
+        }),
+      });
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(text || `HTTP ${res.status}`);
+      }
+
+      const json = (await res.json()) as BriefResponse;
+      setAiBrief(json.brief ?? "");
+      setDeliverables(Array.isArray(json.deliverables) ? json.deliverables : []);
+      setDos(Array.isArray(json.do) ? json.do : []);
+      setDonts(Array.isArray(json.dont) ? json.dont : []);
+      setBudgetNotes(json.budgetNotes ?? "");
+    } catch (err) {
+      setBriefError((err as Error).message);
+    } finally {
+      setIsGeneratingBrief(false);
+    }
+  }
 
   async function onCreateCampaign() {
     if (!vaultAddress) return;
@@ -180,9 +262,18 @@ export default function Home() {
               <input
                 className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none ring-offset-2 placeholder:text-zinc-400 focus:ring-2 focus:ring-zinc-900/10 dark:border-zinc-800 dark:bg-zinc-950 dark:placeholder:text-zinc-500 dark:focus:ring-zinc-50/10"
                 placeholder="e.g., Drive 1,000 signups for Base App"
-                name="objective"
-                value={objective}
-                onChange={(e) => setObjective(e.target.value)}
+        name="objective"
+        value={objective}
+        onChange={(e) => setObjective(e.target.value)}
+      />
+    </label>
+            <label className="flex flex-col gap-2">
+              <span className="text-sm font-medium">Audience</span>
+              <input
+                className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none ring-offset-2 placeholder:text-zinc-400 focus:ring-2 focus:ring-zinc-900/10 dark:border-zinc-800 dark:bg-zinc-950 dark:placeholder:text-zinc-500 dark:focus:ring-zinc-50/10"
+                placeholder="e.g., Base App creators shipping weekly"
+                value={audience}
+                onChange={(e) => setAudience(e.target.value)}
               />
             </label>
             <label className="flex flex-col gap-2">
@@ -196,11 +287,110 @@ export default function Home() {
                 onChange={(e) => setBudgetUsdc(e.target.value)}
               />
             </label>
+            <label className="flex flex-col gap-2">
+              <span className="text-sm font-medium">Tone</span>
+              <input
+                className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none ring-offset-2 placeholder:text-zinc-400 focus:ring-2 focus:ring-zinc-900/10 dark:border-zinc-800 dark:bg-zinc-950 dark:placeholder:text-zinc-500 dark:focus:ring-zinc-50/10"
+                placeholder="e.g., confident, concise, onchain-native"
+                value={tone}
+                onChange={(e) => setTone(e.target.value)}
+              />
+            </label>
+          </div>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <label className="flex flex-col gap-2">
+              <span className="text-sm font-medium">Primary CTA</span>
+              <input
+                className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none ring-offset-2 placeholder:text-zinc-400 focus:ring-2 focus:ring-zinc-900/10 dark:border-zinc-800 dark:bg-zinc-950 dark:placeholder:text-zinc-500 dark:focus:ring-zinc-50/10"
+                placeholder="e.g., Mint, Sign up, Try the demo"
+                value={cta}
+                onChange={(e) => setCta(e.target.value)}
+              />
+            </label>
+            <label className="flex flex-col gap-2">
+              <span className="text-sm font-medium">Constraints</span>
+              <input
+                className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none ring-offset-2 placeholder:text-zinc-400 focus:ring-2 focus:ring-zinc-900/10 dark:border-zinc-800 dark:bg-zinc-950 dark:placeholder:text-zinc-500 dark:focus:ring-zinc-50/10"
+                placeholder="e.g., no paid influencers; 2-week timeline; no AI claims"
+                value={constraints}
+                onChange={(e) => setConstraints(e.target.value)}
+              />
+            </label>
           </div>
           <p className="mt-4 text-sm text-zinc-600 dark:text-zinc-400">
-            Demo scaffold only — fields are placeholders (no wallet, no escrow,
-            no AI).
+            Polite AI workflow: generate suggestions → edit → lock to hash → sign
+            the onchain tx.
           </p>
+        </section>
+
+        <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold">AI Brief + Deliverables</h2>
+              <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+                The AI suggests. You can edit everything before locking it into
+                `metadataHash`.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="h-10 rounded-xl bg-zinc-900 px-4 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-white"
+              disabled={isGeneratingBrief || !objective.trim()}
+              onClick={() => void onGenerateBrief()}
+            >
+              {isGeneratingBrief ? "Generating…" : "Generate Brief"}
+            </button>
+          </div>
+
+          {briefError ? (
+            <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900/40 dark:bg-red-950/40 dark:text-red-200">
+              {briefError}
+            </div>
+          ) : null}
+
+          <div className="mt-6 grid gap-4">
+            <label className="flex flex-col gap-2">
+              <span className="text-sm font-medium">Brief</span>
+              <textarea
+                className="min-h-[140px] w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm leading-6 outline-none ring-offset-2 placeholder:text-zinc-400 focus:ring-2 focus:ring-zinc-900/10 dark:border-zinc-800 dark:bg-zinc-950 dark:placeholder:text-zinc-500 dark:focus:ring-zinc-50/10"
+                placeholder="Generate a brief, then edit it here."
+                value={aiBrief}
+                onChange={(e) => setAiBrief(e.target.value)}
+              />
+            </label>
+
+            {budgetNotes ? (
+              <label className="flex flex-col gap-2">
+                <span className="text-sm font-medium">Budget notes (optional)</span>
+                <textarea
+                  className="min-h-[80px] w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm leading-6 outline-none ring-offset-2 placeholder:text-zinc-400 focus:ring-2 focus:ring-zinc-900/10 dark:border-zinc-800 dark:bg-zinc-950 dark:placeholder:text-zinc-500 dark:focus:ring-zinc-50/10"
+                  value={budgetNotes}
+                  onChange={(e) => setBudgetNotes(e.target.value)}
+                />
+              </label>
+            ) : null}
+
+            <EditableList
+              title="Deliverables checklist"
+              items={deliverables}
+              setItems={setDeliverables}
+              placeholder="Add a deliverable…"
+            />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <EditableList
+                title="Do"
+                items={dos}
+                setItems={setDos}
+                placeholder="Add a do…"
+              />
+              <EditableList
+                title="Don't"
+                items={donts}
+                setItems={setDonts}
+                placeholder="Add a don't…"
+              />
+            </div>
+          </div>
         </section>
 
         <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
@@ -424,5 +614,59 @@ function ActionButton(props: {
     >
       {props.busy ? "Working…" : props.label}
     </button>
+  );
+}
+
+function EditableList(props: {
+  title: string;
+  items: string[];
+  setItems: (items: string[]) => void;
+  placeholder: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-sm font-medium">{props.title}</div>
+        <button
+          type="button"
+          className="h-9 rounded-xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-900 transition hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50 dark:hover:bg-zinc-800"
+          onClick={() => props.setItems([...props.items, ""])}
+        >
+          Add
+        </button>
+      </div>
+
+      <div className="mt-3 flex flex-col gap-2">
+        {props.items.length === 0 ? (
+          <div className="text-sm text-zinc-500 dark:text-zinc-500">
+            {props.placeholder}
+          </div>
+        ) : null}
+        {props.items.map((item, idx) => (
+          <div key={idx} className="flex gap-2">
+            <input
+              className="h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none ring-offset-2 placeholder:text-zinc-400 focus:ring-2 focus:ring-zinc-900/10 dark:border-zinc-800 dark:bg-zinc-900 dark:placeholder:text-zinc-500 dark:focus:ring-zinc-50/10"
+              placeholder={props.placeholder}
+              value={item}
+              onChange={(e) => {
+                const next = props.items.slice();
+                next[idx] = e.target.value;
+                props.setItems(next);
+              }}
+            />
+            <button
+              type="button"
+              className="h-10 rounded-xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-900 transition hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50 dark:hover:bg-zinc-800"
+              onClick={() => {
+                const next = props.items.filter((_, i) => i !== idx);
+                props.setItems(next);
+              }}
+            >
+              Remove
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
