@@ -33,6 +33,8 @@ type BriefResponse = {
   budgetNotes?: string;
 };
 
+type StepMode = "inputs" | "brief";
+
 export default function Home() {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
@@ -40,8 +42,8 @@ export default function Home() {
 
   const [objective, setObjective] = useState("");
   const [audience, setAudience] = useState("");
-  const [tone, setTone] = useState("");
-  const [cta, setCta] = useState("");
+  const [tone, setTone] = useState("confident, concise, onchain-native");
+  const [cta, setCta] = useState("Try the demo");
   const [constraints, setConstraints] = useState("");
 
   const [aiBrief, setAiBrief] = useState("");
@@ -51,6 +53,7 @@ export default function Home() {
   const [budgetNotes, setBudgetNotes] = useState("");
   const [isGeneratingBrief, setIsGeneratingBrief] = useState(false);
   const [briefError, setBriefError] = useState<string | null>(null);
+  const [stepMode, setStepMode] = useState<StepMode>("inputs");
   const [lockedMetadataHash, setLockedMetadataHash] = useState<`0x${string}` | null>(
     null,
   );
@@ -183,11 +186,24 @@ export default function Home() {
       setDos(Array.isArray(json.do) ? json.do : []);
       setDonts(Array.isArray(json.dont) ? json.dont : []);
       setBudgetNotes(json.budgetNotes ?? "");
+      setStepMode("brief");
     } catch (err) {
       setBriefError((err as Error).message);
     } finally {
       setIsGeneratingBrief(false);
     }
+  }
+
+  function onEditInputs() {
+    setStepMode("inputs");
+    setBriefError(null);
+    setLockedMetadataHash(null);
+    setLockedCanonicalJson(null);
+    setAiBrief("");
+    setDeliverables([]);
+    setDos([]);
+    setDonts([]);
+    setBudgetNotes("");
   }
 
   function onLockToHash() {
@@ -287,11 +303,12 @@ export default function Home() {
               <input
                 className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none ring-offset-2 placeholder:text-zinc-400 focus:ring-2 focus:ring-zinc-900/10 dark:border-zinc-800 dark:bg-zinc-950 dark:placeholder:text-zinc-500 dark:focus:ring-zinc-50/10"
                 placeholder="e.g., Drive 1,000 signups for Base App"
-        name="objective"
-        value={objective}
-        onChange={(e) => setObjective(e.target.value)}
-      />
-    </label>
+                name="objective"
+                value={objective}
+                onChange={(e) => setObjective(e.target.value)}
+                disabled={stepMode === "brief"}
+              />
+            </label>
             <label className="flex flex-col gap-2">
               <span className="text-sm font-medium">Audience</span>
               <input
@@ -299,6 +316,7 @@ export default function Home() {
                 placeholder="e.g., Base App creators shipping weekly"
                 value={audience}
                 onChange={(e) => setAudience(e.target.value)}
+                disabled={stepMode === "brief"}
               />
             </label>
             <label className="flex flex-col gap-2">
@@ -310,6 +328,7 @@ export default function Home() {
                 inputMode="decimal"
                 value={budgetUsdc}
                 onChange={(e) => setBudgetUsdc(e.target.value)}
+                disabled={stepMode === "brief"}
               />
             </label>
             <label className="flex flex-col gap-2">
@@ -319,6 +338,7 @@ export default function Home() {
                 placeholder="e.g., confident, concise, onchain-native"
                 value={tone}
                 onChange={(e) => setTone(e.target.value)}
+                disabled={stepMode === "brief"}
               />
             </label>
           </div>
@@ -330,6 +350,7 @@ export default function Home() {
                 placeholder="e.g., Mint, Sign up, Try the demo"
                 value={cta}
                 onChange={(e) => setCta(e.target.value)}
+                disabled={stepMode === "brief"}
               />
             </label>
             <label className="flex flex-col gap-2">
@@ -339,6 +360,7 @@ export default function Home() {
                 placeholder="e.g., no paid influencers; 2-week timeline; no AI claims"
                 value={constraints}
                 onChange={(e) => setConstraints(e.target.value)}
+                disabled={stepMode === "brief"}
               />
             </label>
           </div>
@@ -357,7 +379,7 @@ export default function Home() {
                 `metadataHash`.
               </p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
               <button
                 type="button"
                 className="h-10 rounded-xl bg-zinc-900 px-4 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-white"
@@ -369,7 +391,15 @@ export default function Home() {
               <button
                 type="button"
                 className="h-10 rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-900 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50 dark:hover:bg-zinc-800"
-                disabled={!currentMetadataHash}
+                disabled={stepMode !== "brief" || isGeneratingBrief}
+                onClick={onEditInputs}
+              >
+                Edit Inputs
+              </button>
+              <button
+                type="button"
+                className="h-10 rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-900 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50 dark:hover:bg-zinc-800"
+                disabled={stepMode !== "brief" || !currentMetadataHash || isGeneratingBrief}
                 onClick={onLockToHash}
               >
                 Lock to Hash
@@ -391,6 +421,7 @@ export default function Home() {
                 placeholder="Generate a brief, then edit it here."
                 value={aiBrief}
                 onChange={(e) => setAiBrief(e.target.value)}
+                disabled={stepMode !== "brief"}
               />
             </label>
 
@@ -401,6 +432,7 @@ export default function Home() {
                   className="min-h-[80px] w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm leading-6 outline-none ring-offset-2 placeholder:text-zinc-400 focus:ring-2 focus:ring-zinc-900/10 dark:border-zinc-800 dark:bg-zinc-950 dark:placeholder:text-zinc-500 dark:focus:ring-zinc-50/10"
                   value={budgetNotes}
                   onChange={(e) => setBudgetNotes(e.target.value)}
+                  disabled={stepMode !== "brief"}
                 />
               </label>
             ) : null}
@@ -410,6 +442,7 @@ export default function Home() {
               items={deliverables}
               setItems={setDeliverables}
               placeholder="Add a deliverable…"
+              disabled={stepMode !== "brief"}
             />
             <div className="grid gap-4 sm:grid-cols-2">
               <EditableList
@@ -417,12 +450,14 @@ export default function Home() {
                 items={dos}
                 setItems={setDos}
                 placeholder="Add a do…"
+                disabled={stepMode !== "brief"}
               />
               <EditableList
                 title="Don't"
                 items={donts}
                 setItems={setDonts}
                 placeholder="Add a don't…"
+                disabled={stepMode !== "brief"}
               />
             </div>
           </div>
@@ -683,6 +718,7 @@ function EditableList(props: {
   items: string[];
   setItems: (items: string[]) => void;
   placeholder: string;
+  disabled?: boolean;
 }) {
   return (
     <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
@@ -691,6 +727,7 @@ function EditableList(props: {
         <button
           type="button"
           className="h-9 rounded-xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-900 transition hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50 dark:hover:bg-zinc-800"
+          disabled={props.disabled}
           onClick={() => props.setItems([...props.items, ""])}
         >
           Add
@@ -709,6 +746,7 @@ function EditableList(props: {
               className="h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none ring-offset-2 placeholder:text-zinc-400 focus:ring-2 focus:ring-zinc-900/10 dark:border-zinc-800 dark:bg-zinc-900 dark:placeholder:text-zinc-500 dark:focus:ring-zinc-50/10"
               placeholder={props.placeholder}
               value={item}
+              disabled={props.disabled}
               onChange={(e) => {
                 const next = props.items.slice();
                 next[idx] = e.target.value;
@@ -718,6 +756,7 @@ function EditableList(props: {
             <button
               type="button"
               className="h-10 rounded-xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-900 transition hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50 dark:hover:bg-zinc-800"
+              disabled={props.disabled}
               onClick={() => {
                 const next = props.items.filter((_, i) => i !== idx);
                 props.setItems(next);
