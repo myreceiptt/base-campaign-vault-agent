@@ -438,7 +438,7 @@ export default function Home() {
             <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
               <button
                 type="button"
-                className="h-10 rounded-xl bg-zinc-900 px-4 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-white"
+                className="h-10 w-full rounded-xl bg-zinc-900 px-4 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-white sm:w-auto"
                 disabled={
                   stepMode !== "inputs" || isGeneratingBrief || !objectiveQuality.ok
                 }
@@ -448,7 +448,7 @@ export default function Home() {
               </button>
               <button
                 type="button"
-                className="h-10 rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-900 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50 dark:hover:bg-zinc-800"
+                className="h-10 w-full rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-900 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50 dark:hover:bg-zinc-800 sm:w-auto"
                 disabled={stepMode !== "brief" || isGeneratingBrief}
                 onClick={onEditInputs}
               >
@@ -456,7 +456,7 @@ export default function Home() {
               </button>
               <button
                 type="button"
-                className="h-10 rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-900 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50 dark:hover:bg-zinc-800"
+                className="h-10 w-full rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-900 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50 dark:hover:bg-zinc-800 sm:w-auto"
                 disabled={stepMode !== "brief" || !currentMetadataHash || isGeneratingBrief}
                 onClick={onLockToHash}
               >
@@ -799,7 +799,7 @@ function EditableList(props: {
           </div>
         ) : null}
         {props.items.map((item, idx) => (
-          <div key={idx} className="flex gap-2">
+          <div key={idx} className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <input
               className="h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none ring-offset-2 placeholder:text-zinc-400 focus:ring-2 focus:ring-zinc-900/10 dark:border-zinc-800 dark:bg-zinc-900 dark:placeholder:text-zinc-500 dark:focus:ring-zinc-50/10"
               placeholder={props.placeholder}
@@ -813,7 +813,7 @@ function EditableList(props: {
             />
             <button
               type="button"
-              className="h-10 rounded-xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-900 transition hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50 dark:hover:bg-zinc-800"
+              className="h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-900 transition hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50 dark:hover:bg-zinc-800 sm:w-auto"
               disabled={props.disabled}
               onClick={() => {
                 const next = props.items.filter((_, i) => i !== idx);
