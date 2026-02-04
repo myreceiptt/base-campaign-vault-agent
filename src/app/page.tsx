@@ -35,6 +35,20 @@ type BriefResponse = {
 
 type StepMode = "inputs" | "brief";
 
+function analyzeObjective(text: string) {
+  const trimmed = text.trim();
+  const hasAlphaNum = /[\p{L}\p{N}]/u.test(trimmed);
+  const words = trimmed
+    .split(/\s+/)
+    .map((w) => w.trim())
+    .filter(Boolean)
+    .filter((w) => /[\p{L}\p{N}]/u.test(w)).length;
+  const nonSpaceChars = trimmed.replace(/\s+/g, "").length;
+
+  const ok = hasAlphaNum && (nonSpaceChars >= 15 || words >= 5);
+  return { ok, words, nonSpaceChars };
+}
+
 export default function Home() {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
@@ -63,6 +77,8 @@ export default function Home() {
   const [publisher, setPublisher] = useState("");
   const [deadlineDays, setDeadlineDays] = useState("7");
   const [campaignId, setCampaignId] = useState<string>("");
+
+  const objectiveQuality = useMemo(() => analyzeObjective(objective), [objective]);
 
   const usdcAddress =
     (process.env.NEXT_PUBLIC_USDC as `0x${string}` | undefined) ??
@@ -156,8 +172,10 @@ export default function Home() {
 
   async function onGenerateBrief() {
     setBriefError(null);
-    if (!objective.trim()) {
-      setBriefError("Objective is required.");
+    if (!objectiveQuality.ok) {
+      setBriefError(
+        "Objective is too short. Aim for >= 15 characters or >= 5 words (not just punctuation).",
+      );
       return;
     }
 
@@ -297,7 +315,7 @@ export default function Home() {
         </header>
 
         <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-2">
             <label className="flex flex-col gap-2">
               <span className="text-sm font-medium">Campaign objective</span>
               <input
@@ -308,6 +326,15 @@ export default function Home() {
                 onChange={(e) => setObjective(e.target.value)}
                 disabled={stepMode === "brief"}
               />
+              <FieldHelp>
+                Outcome + metric + timeframe (e.g., “Drive 1,000 signups in 14
+                days”).
+              </FieldHelp>
+              {stepMode === "inputs" && objective.trim() && !objectiveQuality.ok ? (
+                <FieldHint tone="warn">
+                  Add more detail (≥ 15 chars or ≥ 5 words).
+                </FieldHint>
+              ) : null}
             </label>
             <label className="flex flex-col gap-2">
               <span className="text-sm font-medium">Audience</span>
@@ -318,6 +345,10 @@ export default function Home() {
                 onChange={(e) => setAudience(e.target.value)}
                 disabled={stepMode === "brief"}
               />
+              <FieldHelp>Role + stage + context (e.g., “Indie devs pre-launch on Base”).</FieldHelp>
+              {stepMode === "inputs" && !audience.trim() ? (
+                <FieldHint>Recommended: add who this is for.</FieldHint>
+              ) : null}
             </label>
             <label className="flex flex-col gap-2">
               <span className="text-sm font-medium">Budget (USDC)</span>
@@ -330,6 +361,10 @@ export default function Home() {
                 onChange={(e) => setBudgetUsdc(e.target.value)}
                 disabled={stepMode === "brief"}
               />
+              <FieldHelp>Number only (e.g., “500” = 500 USDC escrowed onchain).</FieldHelp>
+              {stepMode === "inputs" && !budgetUsdc.trim() ? (
+                <FieldHint>Recommended: set an escrow amount.</FieldHint>
+              ) : null}
             </label>
             <label className="flex flex-col gap-2">
               <span className="text-sm font-medium">Tone</span>
@@ -340,9 +375,13 @@ export default function Home() {
                 onChange={(e) => setTone(e.target.value)}
                 disabled={stepMode === "brief"}
               />
+              <FieldHelp>2–3 adjectives (e.g., “confident, concise, playful”).</FieldHelp>
+              {stepMode === "inputs" && !tone.trim() ? (
+                <FieldHint>Recommended: set a tone for consistency.</FieldHint>
+              ) : null}
             </label>
           </div>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
             <label className="flex flex-col gap-2">
               <span className="text-sm font-medium">Primary CTA</span>
               <input
@@ -352,6 +391,10 @@ export default function Home() {
                 onChange={(e) => setCta(e.target.value)}
                 disabled={stepMode === "brief"}
               />
+              <FieldHelp>One action (e.g., “Try the demo”, “Sign up”, “Mint”).</FieldHelp>
+              {stepMode === "inputs" && !cta.trim() ? (
+                <FieldHint>Recommended: keep CTA singular.</FieldHint>
+              ) : null}
             </label>
             <label className="flex flex-col gap-2">
               <span className="text-sm font-medium">Constraints</span>
@@ -362,6 +405,10 @@ export default function Home() {
                 onChange={(e) => setConstraints(e.target.value)}
                 disabled={stepMode === "brief"}
               />
+              <FieldHelp>Hard rules (e.g., “no paid influencers”, “2-week timeline”).</FieldHelp>
+              {stepMode === "inputs" && !constraints.trim() ? (
+                <FieldHint>Recommended: add any hard rules.</FieldHint>
+              ) : null}
             </label>
           </div>
           <p className="mt-4 text-sm text-zinc-600 dark:text-zinc-400">
@@ -378,12 +425,23 @@ export default function Home() {
                 The AI suggests. You can edit everything before locking it into
                 `metadataHash`.
               </p>
+              <div className="mt-2 text-xs text-zinc-500 dark:text-zinc-500">
+                Mode:{" "}
+                <span className="font-medium">
+                  {stepMode === "inputs" ? "Inputs" : "Brief"}
+                </span>
+                {stepMode === "inputs"
+                  ? " — generate a brief to start editing."
+                  : " — edit deliverables, then lock to hash."}
+              </div>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
               <button
                 type="button"
                 className="h-10 rounded-xl bg-zinc-900 px-4 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-white"
-                disabled={isGeneratingBrief || !objective.trim()}
+                disabled={
+                  stepMode !== "inputs" || isGeneratingBrief || !objectiveQuality.ok
+                }
                 onClick={() => void onGenerateBrief()}
               >
                 {isGeneratingBrief ? "Generating…" : "Generate Brief"}
@@ -767,6 +825,28 @@ function EditableList(props: {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function FieldHelp(props: { children: React.ReactNode }) {
+  return (
+    <div className="text-xs leading-5 text-zinc-500 dark:text-zinc-500">
+      {props.children}
+    </div>
+  );
+}
+
+function FieldHint(props: { children: React.ReactNode; tone?: "default" | "warn" }) {
+  return (
+    <div
+      className={
+        props.tone === "warn"
+          ? "text-xs leading-5 text-amber-700 dark:text-amber-300"
+          : "text-xs leading-5 text-zinc-500 dark:text-zinc-500"
+      }
+    >
+      {props.children}
     </div>
   );
 }
