@@ -24,6 +24,18 @@ import { erc20Abi } from "@/lib/abi/erc20";
 import { BASE_SEPOLIA_CHAIN_ID, getExplorerTxUrl } from "@/lib/onchain";
 import type { Json } from "@/lib/stableJson";
 import { stableStringify } from "@/lib/stableJson";
+import { cn } from "@/lib/utils";
+
+// Premium UI Components
+import { DotBackground } from "@/components/ui/Backgrounds";
+import { GradientText } from "@/components/ui/TextEffects";
+import { Card } from "@/components/ui/Card";
+import { Spotlight } from "@/components/ui/Spotlight";
+import { ShieldCheck, Sparkles, Rocket, FileText, Search } from "lucide-react";
+import { ShimmerButton } from "@/components/ui/MovingBorder";
+import { Input, Textarea } from "@/components/ui/Input";
+import { Button } from "@/components/ui/Button";
+import { Stepper, Step } from "@/components/campaign/Stepper";
 
 type BriefResponse = {
   brief: string;
@@ -296,431 +308,433 @@ export default function Home() {
     });
   }
 
+  const steps: Step[] = useMemo(() => {
+    const isCreated = Boolean(createdCampaignId);
+    return [
+      {
+        id: 1,
+        title: "Create Campaign",
+        description: "Draft & Lock Brief",
+        status: isCreated ? "completed" : "active",
+      },
+      {
+        id: 2,
+        title: "Deposit",
+        description: "Escrow Budget",
+        status: isCreated ? "active" : "pending",
+      },
+      {
+        id: 3,
+        title: "Release",
+        description: "Milestones",
+        status: "pending",
+      },
+    ];
+  }, [createdCampaignId]);
+
+  const currentStep = createdCampaignId ? 2 : 1;
+
   return (
-    <div className="min-h-screen bg-zinc-50 font-sans text-zinc-950 dark:bg-zinc-950 dark:text-zinc-50">
-      <main className="mx-auto flex w-full max-w-5xl flex-col gap-10 px-6 py-16">
-        <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex flex-col gap-3">
-            <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-              Base Campaign Vault Agent
-            </h1>
-            <p className="max-w-2xl text-base leading-7 text-zinc-600 dark:text-zinc-400">
-              AI campaign builder + USDC escrow onchain. Fokus: Base App
-              creators/brands.
-            </p>
+    <DotBackground className="min-h-screen w-full relative overflow-hidden">
+      <Spotlight className="-top-40 left-0 md:left-60 md:-top-20" fill="white" />
+
+      <main className="mx-auto flex w-full max-w-6xl flex-col gap-10 px-6 py-16 relative z-10">
+        <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <div className="h-6 w-6 rounded-full bg-blue-600" /> {/* Logo placeholder if image not loaded */}
+              <h1 className="text-xl font-bold tracking-tight text-white">Campaign Vault</h1>
+            </div>
+            <p className="text-sm font-medium text-[var(--muted-foreground)]">Base Sepolia • AI Agent</p>
           </div>
           <div className="pt-1">
             <ConnectButton />
           </div>
         </header>
 
-        <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="grid gap-4 md:grid-cols-2">
-            <label className="flex flex-col gap-2">
-              <span className="text-sm font-medium">Campaign objective</span>
-              <input
-                className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none ring-offset-2 placeholder:text-zinc-400 focus:ring-2 focus:ring-zinc-900/10 dark:border-zinc-800 dark:bg-zinc-950 dark:placeholder:text-zinc-500 dark:focus:ring-zinc-50/10"
-                placeholder="e.g., Drive 1,000 signups for Base App"
-                name="objective"
-                value={objective}
-                onChange={(e) => setObjective(e.target.value)}
-                disabled={stepMode === "brief"}
-              />
-              <FieldHelp>
-                Outcome + metric + timeframe (e.g., “Drive 1,000 signups in 14
-                days”).
-              </FieldHelp>
-              {stepMode === "inputs" && objective.trim() && !objectiveQuality.ok ? (
-                <FieldHint tone="warn">
-                  Add more detail (≥ 15 chars or ≥ 5 words).
-                </FieldHint>
-              ) : null}
-            </label>
-            <label className="flex flex-col gap-2">
-              <span className="text-sm font-medium">Audience</span>
-              <input
-                className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none ring-offset-2 placeholder:text-zinc-400 focus:ring-2 focus:ring-zinc-900/10 dark:border-zinc-800 dark:bg-zinc-950 dark:placeholder:text-zinc-500 dark:focus:ring-zinc-50/10"
-                placeholder="e.g., Base App creators shipping weekly"
-                value={audience}
-                onChange={(e) => setAudience(e.target.value)}
-                disabled={stepMode === "brief"}
-              />
-              <FieldHelp>Role + stage + context (e.g., “Indie devs pre-launch on Base”).</FieldHelp>
-              {stepMode === "inputs" && !audience.trim() ? (
-                <FieldHint>Recommended: add who this is for.</FieldHint>
-              ) : null}
-            </label>
-            <label className="flex flex-col gap-2">
-              <span className="text-sm font-medium">Budget (USDC)</span>
-              <input
-                className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none ring-offset-2 placeholder:text-zinc-400 focus:ring-2 focus:ring-zinc-900/10 dark:border-zinc-800 dark:bg-zinc-950 dark:placeholder:text-zinc-500 dark:focus:ring-zinc-50/10"
-                placeholder="e.g., 500"
-                name="budget"
-                inputMode="decimal"
-                value={budgetUsdc}
-                onChange={(e) => setBudgetUsdc(e.target.value)}
-                disabled={stepMode === "brief"}
-              />
-              <FieldHelp>Number only (e.g., “500” = 500 USDC escrowed onchain).</FieldHelp>
-              {stepMode === "inputs" && !budgetUsdc.trim() ? (
-                <FieldHint>Recommended: set an escrow amount.</FieldHint>
-              ) : null}
-            </label>
-            <label className="flex flex-col gap-2">
-              <span className="text-sm font-medium">Tone</span>
-              <input
-                className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none ring-offset-2 placeholder:text-zinc-400 focus:ring-2 focus:ring-zinc-900/10 dark:border-zinc-800 dark:bg-zinc-950 dark:placeholder:text-zinc-500 dark:focus:ring-zinc-50/10"
-                placeholder="e.g., confident, concise, onchain-native"
-                value={tone}
-                onChange={(e) => setTone(e.target.value)}
-                disabled={stepMode === "brief"}
-              />
-              <FieldHelp>2–3 adjectives (e.g., “confident, concise, playful”).</FieldHelp>
-              {stepMode === "inputs" && !tone.trim() ? (
-                <FieldHint>Recommended: set a tone for consistency.</FieldHint>
-              ) : null}
-            </label>
+        {/* Hero Section */}
+        <div className="flex flex-col items-center text-center gap-6 py-10">
+          <div className="inline-flex items-center rounded-full border border-[var(--base-blue-light)]/30 bg-[var(--base-blue-dark)]/20 px-3 py-1 text-xs font-medium text-[var(--base-blue-light)] backdrop-blur-sm">
+            ⚡ Built for Web3
           </div>
-          <div className="mt-4 grid gap-4 md:grid-cols-2">
-            <label className="flex flex-col gap-2">
-              <span className="text-sm font-medium">Primary CTA</span>
-              <input
-                className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none ring-offset-2 placeholder:text-zinc-400 focus:ring-2 focus:ring-zinc-900/10 dark:border-zinc-800 dark:bg-zinc-950 dark:placeholder:text-zinc-500 dark:focus:ring-zinc-50/10"
-                placeholder="e.g., Mint, Sign up, Try the demo"
-                value={cta}
-                onChange={(e) => setCta(e.target.value)}
-                disabled={stepMode === "brief"}
-              />
-              <FieldHelp>One action (e.g., “Try the demo”, “Sign up”, “Mint”).</FieldHelp>
-              {stepMode === "inputs" && !cta.trim() ? (
-                <FieldHint>Recommended: keep CTA singular.</FieldHint>
-              ) : null}
-            </label>
-            <label className="flex flex-col gap-2">
-              <span className="text-sm font-medium">Constraints</span>
-              <input
-                className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none ring-offset-2 placeholder:text-zinc-400 focus:ring-2 focus:ring-zinc-900/10 dark:border-zinc-800 dark:bg-zinc-950 dark:placeholder:text-zinc-500 dark:focus:ring-zinc-50/10"
-                placeholder="e.g., no paid influencers; 2-week timeline; no AI claims"
-                value={constraints}
-                onChange={(e) => setConstraints(e.target.value)}
-                disabled={stepMode === "brief"}
-              />
-              <FieldHelp>Hard rules (e.g., “no paid influencers”, “2-week timeline”).</FieldHelp>
-              {stepMode === "inputs" && !constraints.trim() ? (
-                <FieldHint>Recommended: add any hard rules.</FieldHint>
-              ) : null}
-            </label>
-          </div>
-          <p className="mt-4 text-sm text-zinc-600 dark:text-zinc-400">
-            Polite AI workflow: generate suggestions → edit → lock to hash → sign
-            the onchain tx.
+
+          <h2 className="max-w-4xl text-5xl font-bold tracking-tight sm:text-7xl">
+            <span className="text-white">AI-Powered</span>{" "}
+            <GradientText>Campaign Builder</GradientText>
+          </h2>
+
+          <p className="max-w-2xl text-lg leading-8 text-[var(--muted-foreground)]">
+            Launch campaigns with transparent onchain payments.
+            AI generates the brief, you control the funds via smart contract vault.
           </p>
-        </section>
 
-        <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <h2 className="text-lg font-semibold">AI Brief + Deliverables</h2>
-              <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-                The AI suggests. You can edit everything before locking it into
-                `metadataHash`.
-              </p>
-              <div className="mt-2 text-xs text-zinc-500 dark:text-zinc-500">
-                Mode:{" "}
-                <span className="font-medium">
-                  {stepMode === "inputs" ? "Inputs" : "Brief"}
-                </span>
-                {stepMode === "inputs"
-                  ? " — generate a brief to start editing."
-                  : " — edit deliverables, then lock to hash."}
-              </div>
+          <div className="flex flex-wrap justify-center gap-4 mt-2">
+            <div className="flex items-center gap-2 rounded-full border border-zinc-800 bg-zinc-900/50 px-4 py-1.5 text-sm text-zinc-400">
+              <ShieldCheck className="w-4 h-4 text-emerald-500" /> USDC Escrow
             </div>
-            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
-              <button
-                type="button"
-                className="h-10 w-full rounded-xl bg-zinc-900 px-4 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-white sm:w-auto"
-                disabled={
-                  stepMode !== "inputs" || isGeneratingBrief || !objectiveQuality.ok
-                }
-                onClick={() => void onGenerateBrief()}
-              >
-                {isGeneratingBrief ? "Generating…" : "Generate Brief"}
-              </button>
-              <button
-                type="button"
-                className="h-10 w-full rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-900 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50 dark:hover:bg-zinc-800 sm:w-auto"
-                disabled={stepMode !== "brief" || isGeneratingBrief}
-                onClick={onEditInputs}
-              >
-                Edit Inputs
-              </button>
-              <button
-                type="button"
-                className="h-10 w-full rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-900 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50 dark:hover:bg-zinc-800 sm:w-auto"
-                disabled={stepMode !== "brief" || !currentMetadataHash || isGeneratingBrief}
-                onClick={onLockToHash}
-              >
-                Lock to Hash
-              </button>
+            <div className="flex items-center gap-2 rounded-full border border-zinc-800 bg-zinc-900/50 px-4 py-1.5 text-sm text-zinc-400">
+              <Sparkles className="w-4 h-4 text-purple-500" /> AI Content
+            </div>
+            <div className="flex items-center gap-2 rounded-full border border-zinc-800 bg-zinc-900/50 px-4 py-1.5 text-sm text-zinc-400">
+              <Rocket className="w-4 h-4 text-blue-500" /> On-chain Release
             </div>
           </div>
+        </div>
 
-          {briefError ? (
-            <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900/40 dark:bg-red-950/40 dark:text-red-200">
-              {briefError}
-            </div>
-          ) : null}
+        <div className="py-2">
+          <Stepper steps={steps} currentStep={currentStep} />
+        </div>
 
-          <div className="mt-6 grid gap-4">
-            <label className="flex flex-col gap-2">
-              <span className="text-sm font-medium">Brief</span>
-              <textarea
-                className="min-h-[140px] w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm leading-6 outline-none ring-offset-2 placeholder:text-zinc-400 focus:ring-2 focus:ring-zinc-900/10 dark:border-zinc-800 dark:bg-zinc-950 dark:placeholder:text-zinc-500 dark:focus:ring-zinc-50/10"
-                placeholder="Generate a brief, then edit it here."
-                value={aiBrief}
-                onChange={(e) => setAiBrief(e.target.value)}
-                disabled={stepMode !== "brief"}
-              />
-            </label>
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
+          {/* Left Column: Campaign Form & AI Brief */}
+          <div className="flex flex-col gap-6 lg:col-span-2">
+            <Card className="p-6">
+              <div className="mb-6 flex items-start gap-4 border-b border-white/5 pb-6">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-blue-500">
+                  <FileText className="h-6 w-6" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-white">Campaign Details</h2>
+                  <p className="text-sm text-[var(--muted-foreground)]">
+                    Define your requirements. AI will generate a structured brief.
+                  </p>
+                </div>
+              </div>
 
-            {budgetNotes ? (
-              <label className="flex flex-col gap-2">
-                <span className="text-sm font-medium">Budget notes (optional)</span>
-                <textarea
-                  className="min-h-[80px] w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm leading-6 outline-none ring-offset-2 placeholder:text-zinc-400 focus:ring-2 focus:ring-zinc-900/10 dark:border-zinc-800 dark:bg-zinc-950 dark:placeholder:text-zinc-500 dark:focus:ring-zinc-50/10"
-                  value={budgetNotes}
-                  onChange={(e) => setBudgetNotes(e.target.value)}
+              <div className="space-y-6">
+                <Textarea
+                  label="Campaign Objective"
+                  placeholder="e.g., Drive 1,000 signups for Base App"
+                  name="objective"
+                  value={objective}
+                  onChange={(e) => setObjective(e.target.value)}
+                  disabled={stepMode === "brief"}
+                  hint="Outcome + metric + timeframe (e.g., “Drive 1,000 signups in 14 days”)."
+                />
+
+                <div className="grid gap-6 sm:grid-cols-2">
+                  <Input
+                    label="Budget (USDC)"
+                    placeholder="e.g., 500"
+                    name="budget"
+                    inputMode="decimal"
+                    value={budgetUsdc}
+                    onChange={(e) => setBudgetUsdc(e.target.value)}
+                    disabled={stepMode === "brief"}
+                    hint="Escrowed amount."
+                    error={
+                      stepMode === "inputs" && !budgetUsdc.trim()
+                        ? "Recommended."
+                        : undefined
+                    }
+                  />
+                  <Input
+                    label="Deadline (days)"
+                    inputMode="numeric"
+                    placeholder="7"
+                    value={deadlineDays}
+                    onChange={(e) => setDeadlineDays(e.target.value)}
+                    disabled={stepMode === "brief"}
+                  />
+                </div>
+
+                <div className="grid gap-6 sm:grid-cols-2">
+                  <Input
+                    label="Target Audience"
+                    placeholder="e.g., Developers"
+                    value={audience}
+                    onChange={(e) => setAudience(e.target.value)}
+                    disabled={stepMode === "brief"}
+                  />
+                  <Input
+                    label="Tone of Voice"
+                    placeholder="e.g., confident, concise"
+                    value={tone}
+                    onChange={(e) => setTone(e.target.value)}
+                    disabled={stepMode === "brief"}
+                  />
+                </div>
+
+                <div className="grid gap-6 sm:grid-cols-2">
+                  <Input
+                    label="Primary CTA"
+                    placeholder="e.g., Mint Now"
+                    value={cta}
+                    onChange={(e) => setCta(e.target.value)}
+                    disabled={stepMode === "brief"}
+                  />
+                  <Input
+                    label="Constraints"
+                    placeholder="e.g., no paid ads"
+                    value={constraints}
+                    onChange={(e) => setConstraints(e.target.value)}
+                    disabled={stepMode === "brief"}
+                  />
+                </div>
+
+                <Input
+                  label="Publisher Address"
+                  placeholder="0x... or ens.eth"
+                  value={publisher}
+                  onChange={(e) => setPublisher(e.target.value)}
+                  className="font-mono"
+                  disabled={stepMode === "brief"}
+                />
+              </div>
+            </Card>
+
+            <Card className="p-6">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold">AI Brief + Deliverables</h2>
+                  <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+                    Review and edit the AI-generated brief before locking.
+                  </p>
+                  <div className="mt-2 text-xs text-zinc-500">
+                    Mode:{" "}
+                    <span className="font-medium text-zinc-400">
+                      {stepMode === "inputs" ? "Inputs" : "Brief"}
+                    </span>
+                    {stepMode === "inputs"
+                      ? " — generate a brief to start editing."
+                      : " — edit deliverables, then lock to hash."}
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+                  <Button
+                    isLoading={isGeneratingBrief}
+                    disabled={
+                      stepMode !== "inputs" || isGeneratingBrief || !objectiveQuality.ok
+                    }
+                    onClick={() => void onGenerateBrief()}
+                  >
+                    Generate Brief
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    disabled={stepMode !== "brief" || isGeneratingBrief}
+                    onClick={onEditInputs}
+                  >
+                    Edit Inputs
+                  </Button>
+                </div>
+              </div>
+
+              {briefError ? (
+                <div className="mt-4 rounded-xl border border-red-900/40 bg-red-950/40 p-3 text-sm text-red-200">
+                  {briefError}
+                </div>
+              ) : null}
+
+              <div className="mt-6 grid gap-4">
+                <Textarea
+                  label="Brief"
+                  placeholder="Generate a brief, then edit it here."
+                  value={aiBrief}
+                  onChange={(e) => setAiBrief(e.target.value)}
                   disabled={stepMode !== "brief"}
                 />
-              </label>
-            ) : null}
 
-            <EditableList
-              title="Deliverables checklist"
-              items={deliverables}
-              setItems={setDeliverables}
-              placeholder="Add a deliverable…"
-              disabled={stepMode !== "brief"}
-            />
-            <div className="grid gap-4 sm:grid-cols-2">
-              <EditableList
-                title="Do"
-                items={dos}
-                setItems={setDos}
-                placeholder="Add a do…"
-                disabled={stepMode !== "brief"}
-              />
-              <EditableList
-                title="Don't"
-                items={donts}
-                setItems={setDonts}
-                placeholder="Add a don't…"
-                disabled={stepMode !== "brief"}
-              />
-            </div>
-          </div>
+                {budgetNotes ? (
+                  <Textarea
+                    label="Budget notes (optional)"
+                    value={budgetNotes}
+                    onChange={(e) => setBudgetNotes(e.target.value)}
+                    disabled={stepMode !== "brief"}
+                  />
+                ) : null}
 
-          <div className="mt-6 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div className="text-sm font-medium">metadataHash (locked)</div>
-              <div className="text-xs text-zinc-600 dark:text-zinc-400">
-                {lockedMetadataHash
-                  ? isDirtySinceLock
-                    ? "Edited since lock — lock again before signing."
-                    : "Ready to sign."
-                  : "Not locked yet."}
+                <EditableList
+                  title="Deliverables checklist"
+                  items={deliverables}
+                  setItems={setDeliverables}
+                  placeholder="Add a deliverable…"
+                  disabled={stepMode !== "brief"}
+                />
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <EditableList
+                    title="Do"
+                    items={dos}
+                    setItems={setDos}
+                    placeholder="Add a do…"
+                    disabled={stepMode !== "brief"}
+                  />
+                  <EditableList
+                    title="Don't"
+                    items={donts}
+                    setItems={setDonts}
+                    placeholder="Add a don't…"
+                    disabled={stepMode !== "brief"}
+                  />
+                </div>
               </div>
-            </div>
-            <div className="mt-2 font-mono text-xs text-zinc-700 dark:text-zinc-300">
-              {lockedMetadataHash ?? "—"}
-            </div>
-            {lockedCanonicalJson ? (
-              <details className="mt-3">
-                <summary className="cursor-pointer text-sm text-zinc-600 dark:text-zinc-400">
-                  View canonical JSON (locked)
-                </summary>
-                <pre className="mt-2 max-h-64 overflow-auto rounded-xl border border-zinc-200 bg-white p-3 text-xs text-zinc-800 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100">
-                  {lockedCanonicalJson}
-                </pre>
-              </details>
-            ) : null}
-          </div>
-        </section>
-
-        <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <h2 className="text-lg font-semibold">Onchain (Base Sepolia)</h2>
-              <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-                USDC: <span className="font-mono text-xs">{usdcAddress}</span>
-              </p>
-              <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-                Vault:{" "}
-                <span className="font-mono text-xs">
-                  {vaultAddress ?? "set NEXT_PUBLIC_VAULT"}
-                </span>
-              </p>
-            </div>
-            {wrongChain ? (
-              <button
-                type="button"
-                className="h-10 rounded-xl bg-zinc-900 px-4 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:opacity-60 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-white"
-                disabled={isSwitching}
-                onClick={() => switchChain({ chainId: baseSepolia.id })}
-              >
-                Switch to Base Sepolia
-              </button>
-            ) : null}
+            </Card>
           </div>
 
-          <div className="mt-6 grid gap-4 sm:grid-cols-2">
-            <label className="flex flex-col gap-2">
-              <span className="text-sm font-medium">Publisher address</span>
-              <input
-                className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm font-mono outline-none ring-offset-2 placeholder:text-zinc-400 focus:ring-2 focus:ring-zinc-900/10 dark:border-zinc-800 dark:bg-zinc-950 dark:placeholder:text-zinc-500 dark:focus:ring-zinc-50/10"
-                placeholder="0x..."
-                value={publisher}
-                onChange={(e) => setPublisher(e.target.value)}
-              />
-            </label>
-            <label className="flex flex-col gap-2">
-              <span className="text-sm font-medium">Deadline (days)</span>
-              <input
-                className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none ring-offset-2 placeholder:text-zinc-400 focus:ring-2 focus:ring-zinc-900/10 dark:border-zinc-800 dark:bg-zinc-950 dark:placeholder:text-zinc-500 dark:focus:ring-zinc-50/10"
-                inputMode="numeric"
-                placeholder="7"
-                value={deadlineDays}
-                onChange={(e) => setDeadlineDays(e.target.value)}
-              />
-            </label>
-            <label className="flex flex-col gap-2">
-              <span className="text-sm font-medium">Campaign ID</span>
-              <input
-                className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none ring-offset-2 placeholder:text-zinc-400 focus:ring-2 focus:ring-zinc-900/10 dark:border-zinc-800 dark:bg-zinc-950 dark:placeholder:text-zinc-500 dark:focus:ring-zinc-50/10"
-                placeholder={createdCampaignId ?? "e.g., 1"}
-                value={campaignId}
-                onChange={(e) => setCampaignId(e.target.value)}
-              />
-            </label>
-            <div className="flex flex-col justify-end gap-2">
-              <div className="text-sm text-zinc-600 dark:text-zinc-400">
-                Allowance:{" "}
-                <span className="font-mono text-xs">
-                  {allowanceQuery.data?.toString() ?? "—"}
-                </span>
+          {/* Right Column: Contract Info & Actions */}
+          <div className="flex flex-col gap-6">
+            <Card className="sticky top-6 p-6">
+              <div className="mb-6 flex items-center gap-2 text-white">
+                <ShieldCheck className="h-5 w-5 text-emerald-500" />
+                <h3 className="font-semibold">Contract Info</h3>
               </div>
-              <div className="text-sm text-zinc-600 dark:text-zinc-400">
-                metadataHash:{" "}
-                <span className="font-mono text-xs">
-                  {lockedMetadataHash ?? "lock in Step 1"}
-                </span>
+
+              <div className="space-y-4 rounded-xl border border-white/5 bg-zinc-950/50 p-4">
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs font-medium text-[var(--muted-foreground)]">USDC Contract</span>
+                  <span className="break-all font-mono text-xs text-zinc-400">{usdcAddress}</span>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs font-medium text-[var(--muted-foreground)]">Vault Contract</span>
+                  <span className="break-all font-mono text-xs text-zinc-400">
+                    {vaultAddress ?? "not configured"}
+                  </span>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs font-medium text-[var(--muted-foreground)]">Allowance</span>
+                  <span className="break-all font-mono text-xs text-zinc-400">
+                    {allowanceQuery.data?.toString() ?? "0"}
+                  </span>
+                </div>
               </div>
-            </div>
-          </div>
 
-          <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <ActionButton
-              label="Create campaign"
-              disabled={!canTransact || !lockedMetadataHash || isDirtySinceLock}
-              busy={isPending}
-              onClick={onCreateCampaign}
-            />
-            <ActionButton
-              label="Approve USDC"
-              disabled={!canTransact}
-              busy={isPending}
-              onClick={onApproveUsdc}
-            />
-            <ActionButton
-              label="Deposit USDC"
-              disabled={!canTransact}
-              busy={isPending}
-              onClick={onDeposit}
-            />
-            <ActionButton
-              label="Release"
-              disabled={!canTransact}
-              busy={isPending}
-              onClick={onRelease}
-            />
-          </div>
-
-          <div className="mt-4 text-sm text-zinc-600 dark:text-zinc-400">
-            {!isConnected ? "Connect a wallet to transact." : null}
-            {isConnected && wrongChain
-              ? " Switch to Base Sepolia (84532) to transact."
-              : null}
-            {isConnected && !vaultAddress
-              ? " Set NEXT_PUBLIC_VAULT in .env.local."
-              : null}
-          </div>
-
-          {error ? (
-            <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900/40 dark:bg-red-950/40 dark:text-red-200">
-              {error.message}
-            </div>
-          ) : null}
-
-          {lastHash ? (
-            <div className="mt-3 flex flex-col gap-1 text-sm">
-              <div className="text-zinc-600 dark:text-zinc-400">
-                Tx:{" "}
-                <a
-                  className="font-mono text-xs underline decoration-zinc-300 underline-offset-4 hover:decoration-zinc-500 dark:decoration-zinc-700"
-                  href={getExplorerTxUrl(lastHash)}
-                  target="_blank"
-                  rel="noreferrer"
+              {/* Action Buttons */}
+              <div className="mt-6 flex flex-col gap-3">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={stepMode !== "brief" || !currentMetadataHash || isGeneratingBrief}
+                  onClick={onLockToHash}
+                  className="w-full justify-center"
                 >
-                  {lastHash}
-                </a>
-              </div>
-              <div className="text-zinc-600 dark:text-zinc-400">
-                Status:{" "}
-                {receipt.isLoading
-                  ? "pending"
-                  : receipt.isSuccess
-                    ? "confirmed"
-                    : receipt.isError
-                      ? "error"
-                      : "—"}
-                {createdCampaignId ? ` • created campaignId: ${createdCampaignId}` : null}
-              </div>
-            </div>
-          ) : null}
-        </section>
+                  Lock Brief to Hash
+                </Button>
 
-        <section className="grid gap-4 sm:grid-cols-2">
+                <div className="my-2 h-px w-full bg-white/5" />
+
+                <ActionButton
+                  label="Create Campaign"
+                  disabled={!canTransact || !lockedMetadataHash || isDirtySinceLock}
+                  busy={isPending}
+                  onClick={onCreateCampaign}
+                />
+                <ActionButton
+                  label="Approve USDC"
+                  disabled={!canTransact}
+                  busy={isPending}
+                  onClick={onApproveUsdc}
+                />
+                <ActionButton
+                  label="Deposit"
+                  disabled={!canTransact}
+                  busy={isPending}
+                  onClick={onDeposit}
+                />
+                <ActionButton
+                  label="Release"
+                  disabled={!canTransact}
+                  busy={isPending}
+                  onClick={onRelease}
+                />
+              </div>
+
+              {wrongChain ? (
+                <div className="mt-4">
+                  <Button
+                    variant="secondary"
+                    disabled={isSwitching}
+                    onClick={() => switchChain({ chainId: baseSepolia.id })}
+                    className="w-full"
+                  >
+                    Switch to Base Sepolia
+                  </Button>
+                </div>
+              ) : null}
+
+              {/* Metadata Hash Status */}
+              <div className="mt-4 rounded-lg bg-blue-500/10 p-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-blue-400">Metadata Hash</span>
+                  <span className="text-[10px] text-blue-500/70">
+                    {lockedMetadataHash ? "LOCKED" : "UNLOCKED"}
+                  </span>
+                </div>
+                <div className="mt-1 break-all font-mono text-[10px] text-blue-300/80">
+                  {lockedMetadataHash ?? "Generate & Lock brief first"}
+                </div>
+              </div>
+
+              {/* Transaction Status */}
+              {lastHash ? (
+                <div className="mt-4 rounded-lg bg-zinc-900 p-3">
+                  <div className="text-xs text-zinc-400">Transaction</div>
+                  <a
+                    className="mt-1 block break-all font-mono text-[10px] text-blue-400 underline decoration-blue-400/30"
+                    href={getExplorerTxUrl(lastHash)}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {lastHash}
+                  </a>
+                  <div className="mt-2 flex items-center justify-between border-t border-white/5 pt-2">
+                    <span className="text-[10px] text-zinc-500">Status</span>
+                    <span className={cn("text-[10px] font-medium",
+                      receipt.isSuccess ? "text-emerald-400" : "text-amber-400"
+                    )}>
+                      {receipt.isLoading ? "Pending" : receipt.isSuccess ? "Confirmed" : "Sent"}
+                    </span>
+                  </div>
+                </div>
+              ) : null}
+
+              {error ? (
+                <div className="mt-4 text-xs text-red-400">
+                  {error.message}
+                </div>
+              ) : null}
+
+            </Card>
+          </div>
+        </div>
+
+        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 opacity-60 hover:opacity-100 transition-opacity">
           <FlowCard
             step="01"
-            title="Create Campaign"
-            description="Define objective, audience, and success metrics."
-            cta="Create"
+            title="Create"
+            description="Define objective & lock brief."
+            cta="Start"
           />
           <FlowCard
             step="02"
             title="Deposit"
-            description="Lock the campaign budget into an escrow vault."
-            cta="Deposit"
+            description="Escrow budget onchain."
+            cta="Fund"
           />
           <FlowCard
             step="03"
-            title="Generate Content"
-            description="Draft campaign assets and copy for review."
-            cta="Generate"
+            title="Generate"
+            description="AI creates content."
+            cta="Auto"
           />
           <FlowCard
             step="04"
             title="Release"
-            description="Publish and release funds based on milestones."
-            cta="Release"
+            description="Approve & payout."
+            cta="Pay"
           />
         </section>
 
-        <footer className="pt-6 text-sm text-zinc-500 dark:text-zinc-500">
-          v0 scaffold — next: wallet connect, escrow contract, AI route.
+        <footer className="flex flex-col gap-4 border-t border-white/10 pt-8 text-center text-sm text-[var(--muted-foreground)] sm:flex-row sm:items-center sm:justify-between sm:text-left">
+          <p>
+            &copy; 2026 Campaign Vault Agent. Built on <span className="text-blue-500">Base</span> with <span className="text-purple-500">AI</span>.
+          </p>
+          <div className="flex justify-center gap-6 sm:justify-end">
+            <a href="#" className="hover:text-white transition-colors">Github</a>
+            <a href="#" className="hover:text-white transition-colors">Docs</a>
+          </div>
         </footer>
       </main>
-    </div>
+    </DotBackground>
   );
 }
 
@@ -731,25 +745,22 @@ function FlowCard(props: {
   cta: string;
 }) {
   return (
-    <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+    <Card className="p-6">
       <div className="flex items-start justify-between gap-4">
         <div className="flex flex-col gap-2">
-          <div className="text-xs font-medium tracking-wider text-zinc-500 dark:text-zinc-400">
+          <div className="text-xs font-medium tracking-wider text-[var(--muted-foreground)]">
             {props.step}
           </div>
           <h2 className="text-lg font-semibold">{props.title}</h2>
-          <p className="text-sm leading-6 text-zinc-600 dark:text-zinc-400">
+          <p className="text-sm leading-6 text-[var(--muted-foreground)]">
             {props.description}
           </p>
         </div>
-        <button
-          type="button"
-          className="h-10 shrink-0 rounded-xl bg-zinc-900 px-4 text-sm font-medium text-white transition hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-900/20 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-white dark:focus:ring-zinc-50/20"
-        >
+        <Button variant="secondary" size="sm">
           {props.cta}
-        </button>
+        </Button>
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -760,14 +771,15 @@ function ActionButton(props: {
   onClick: () => void | Promise<void>;
 }) {
   return (
-    <button
-      type="button"
-      disabled={props.disabled || props.busy}
+    <Button
+      variant="primary"
+      isLoading={props.busy}
+      disabled={props.disabled}
       onClick={() => void props.onClick()}
-      className="h-11 rounded-xl bg-zinc-900 px-4 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-white"
+      className="w-full"
     >
-      {props.busy ? "Working…" : props.label}
-    </button>
+      {props.label}
+    </Button>
   );
 }
 
@@ -779,29 +791,29 @@ function EditableList(props: {
   disabled?: boolean;
 }) {
   return (
-    <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+    <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
       <div className="flex items-center justify-between gap-3">
         <div className="text-sm font-medium">{props.title}</div>
-        <button
-          type="button"
-          className="h-9 rounded-xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-900 transition hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50 dark:hover:bg-zinc-800"
+        <Button
+          variant="secondary"
+          size="sm"
           disabled={props.disabled}
           onClick={() => props.setItems([...props.items, ""])}
         >
           Add
-        </button>
+        </Button>
       </div>
 
       <div className="mt-3 flex flex-col gap-2">
         {props.items.length === 0 ? (
-          <div className="text-sm text-zinc-500 dark:text-zinc-500">
+          <div className="text-sm text-[var(--muted-foreground)]">
             {props.placeholder}
           </div>
         ) : null}
         {props.items.map((item, idx) => (
           <div key={idx} className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <input
-              className="h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none ring-offset-2 placeholder:text-zinc-400 focus:ring-2 focus:ring-zinc-900/10 dark:border-zinc-800 dark:bg-zinc-900 dark:placeholder:text-zinc-500 dark:focus:ring-zinc-50/10"
+            <Input
+              className="flex-1"
               placeholder={props.placeholder}
               value={item}
               disabled={props.disabled}
@@ -811,9 +823,9 @@ function EditableList(props: {
                 props.setItems(next);
               }}
             />
-            <button
-              type="button"
-              className="h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-900 transition hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50 dark:hover:bg-zinc-800 sm:w-auto"
+            <Button
+              variant="ghost"
+              size="sm"
               disabled={props.disabled}
               onClick={() => {
                 const next = props.items.filter((_, i) => i !== idx);
@@ -821,32 +833,10 @@ function EditableList(props: {
               }}
             >
               Remove
-            </button>
+            </Button>
           </div>
         ))}
       </div>
-    </div>
-  );
-}
-
-function FieldHelp(props: { children: React.ReactNode }) {
-  return (
-    <div className="text-xs leading-5 text-zinc-500 dark:text-zinc-500">
-      {props.children}
-    </div>
-  );
-}
-
-function FieldHint(props: { children: React.ReactNode; tone?: "default" | "warn" }) {
-  return (
-    <div
-      className={
-        props.tone === "warn"
-          ? "text-xs leading-5 text-amber-700 dark:text-amber-300"
-          : "text-xs leading-5 text-zinc-500 dark:text-zinc-500"
-      }
-    >
-      {props.children}
     </div>
   );
 }
