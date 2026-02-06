@@ -42,6 +42,7 @@ contract CampaignVault is ReentrancyGuard {
         uint64 deadline,
         bytes32 metadataHash
     );
+    event PublisherAssigned(uint256 indexed campaignId, address indexed publisher);
     event Deposited(uint256 indexed campaignId, address indexed advertiser, uint256 amount);
     event Delivered(uint256 indexed campaignId, address indexed publisher, bytes32 proofHash);
     event Released(
@@ -59,6 +60,7 @@ contract CampaignVault is ReentrancyGuard {
     error InvalidFeeBps();
     error Unauthorized();
     error InvalidStatus(Status expected, Status actual);
+    error PublisherAlreadyAssigned();
 
     constructor(address usdc_, address treasury_, uint16 feeBps_) {
         if (usdc_ == address(0) || treasury_ == address(0)) revert InvalidAddress();
@@ -74,7 +76,7 @@ contract CampaignVault is ReentrancyGuard {
         uint64 deadline,
         bytes32 metadataHash
     ) external returns (uint256 campaignId) {
-        if (publisher == address(0)) revert InvalidAddress();
+        // publisher can be address(0) - will be assigned later via assignPublisher
         if (budget == 0) revert InvalidBudget();
         if (deadline <= block.timestamp) revert InvalidDeadline();
 
@@ -92,10 +94,22 @@ contract CampaignVault is ReentrancyGuard {
         emit CampaignCreated(campaignId, msg.sender, publisher, budget, deadline, metadataHash);
     }
 
+    function assignPublisher(uint256 campaignId, address publisher) external {
+        Campaign storage c = campaigns[campaignId];
+        if (c.status != Status.CREATED) revert InvalidStatus(Status.CREATED, c.status);
+        if (msg.sender != c.advertiser) revert Unauthorized();
+        if (publisher == address(0)) revert InvalidAddress();
+        if (c.publisher != address(0)) revert PublisherAlreadyAssigned();
+
+        c.publisher = publisher;
+        emit PublisherAssigned(campaignId, publisher);
+    }
+
     function deposit(uint256 campaignId) external nonReentrant {
         Campaign storage c = campaigns[campaignId];
         if (c.status != Status.CREATED) revert InvalidStatus(Status.CREATED, c.status);
         if (msg.sender != c.advertiser) revert Unauthorized();
+        if (c.publisher == address(0)) revert InvalidAddress(); // Publisher must be assigned before deposit
 
         c.status = Status.DEPOSITED;
         usdc.safeTransferFrom(msg.sender, address(this), c.budget);

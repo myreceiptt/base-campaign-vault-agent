@@ -254,7 +254,7 @@ export default function Home() {
         address: vaultAddress,
         abi: campaignVaultAbi,
         functionName: "createCampaign",
-        args: [publisherAddress, budgetUnits, deadline, metadataHash],
+        args: [zeroAddress, budgetUnits, deadline, metadataHash],
         chainId: BASE_SEPOLIA_CHAIN_ID,
       });
       toastInfo("Transaction submitted! Waiting for confirmation...");
