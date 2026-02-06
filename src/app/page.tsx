@@ -524,17 +524,6 @@ export default function Home() {
                           </div>
                         </div>
 
-                        {/* Publisher Address */}
-                        <ENSInput
-                          label="Publisher Address"
-                          placeholder="vitalik.eth or 0x..."
-                          value={publisher}
-                          onChange={(value, resolvedAddress) => {
-                            setPublisher(resolvedAddress || value);
-                          }}
-                          hint="Supports ENS names - the publisher receives funds on completion"
-                        />
-
                         {/* Workflow hint */}
                         <p className="text-sm text-gray-500">
                           Polite AI workflow: generate suggestions → edit → lock to hash → sign the onchain tx.
@@ -543,7 +532,7 @@ export default function Home() {
                         <div className="pt-4">
                           <ShimmerButton
                             onClick={onCreateCampaign}
-                            disabled={!canTransact || !objective || !budgetUnits || !publisher || isPending}
+                            disabled={!canTransact || !objective || !budgetUnits || isPending}
                             className="w-full"
                           >
                             {isPending ? (
@@ -790,7 +779,7 @@ export default function Home() {
 
               {/* Campaign Summary */}
               <AnimatePresence>
-                {(objective || budgetUsdc) && (
+                {(objective || budgetUsdc || audience || tone || cta || constraints) && (
                   <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -805,7 +794,13 @@ export default function Home() {
                       {objective && (
                         <div>
                           <p className="text-gray-500 mb-1">Objective</p>
-                          <p className="text-gray-200 line-clamp-3">{objective}</p>
+                          <p className="text-gray-200 line-clamp-2">{objective}</p>
+                        </div>
+                      )}
+                      {audience && (
+                        <div>
+                          <p className="text-gray-500 mb-1">Audience</p>
+                          <p className="text-gray-200 line-clamp-2">{audience}</p>
                         </div>
                       )}
                       {budgetUsdc && (
@@ -814,10 +809,22 @@ export default function Home() {
                           <p className="text-2xl font-bold gradient-text-hero">{budgetUsdc} USDC</p>
                         </div>
                       )}
-                      {publisher && (
+                      {tone && (
                         <div>
-                          <p className="text-gray-500 mb-1">Publisher</p>
-                          <p className="font-mono text-xs text-gray-300 truncate">{publisher}</p>
+                          <p className="text-gray-500 mb-1">Tone</p>
+                          <p className="text-gray-200">{tone}</p>
+                        </div>
+                      )}
+                      {cta && (
+                        <div>
+                          <p className="text-gray-500 mb-1">Primary CTA</p>
+                          <p className="text-gray-200">{cta}</p>
+                        </div>
+                      )}
+                      {constraints && (
+                        <div>
+                          <p className="text-gray-500 mb-1">Constraints</p>
+                          <p className="text-gray-200 line-clamp-2">{constraints}</p>
                         </div>
                       )}
                     </div>
