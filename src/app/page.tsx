@@ -114,7 +114,11 @@ export default function Home() {
 
   // Form state
   const [objective, setObjective] = useState("");
+  const [audience, setAudience] = useState("");
   const [budgetUsdc, setBudgetUsdc] = useState("");
+  const [tone, setTone] = useState("confident, concise, onchain-native");
+  const [cta, setCta] = useState("Try the demo");
+  const [constraints, setConstraints] = useState("");
   const [publisher, setPublisher] = useState("");
   const [deadlineDays, setDeadlineDays] = useState("7");
   const [campaignId, setCampaignId] = useState<string>("");
@@ -457,33 +461,70 @@ export default function Home() {
                       </div>
 
                       <div className="grid gap-6">
-                        <Textarea
-                          label="Campaign Objective"
-                          placeholder="e.g., Drive 1,000 signups for our Base App with engaging social content..."
-                          value={objective}
-                          onChange={(e) => setObjective(e.target.value)}
-                          hint="The AI will use this to generate targeted content"
-                        />
-
+                        {/* Row 1: Campaign Objective + Audience */}
                         <div className="grid gap-6 sm:grid-cols-2">
                           <Input
-                            label="Budget (USDC)"
-                            placeholder="500"
-                            inputMode="decimal"
-                            value={budgetUsdc}
-                            onChange={(e) => setBudgetUsdc(e.target.value)}
-                            leftIcon={<DollarSign className="w-4 h-4" />}
+                            label="Campaign objective"
+                            placeholder="e.g., Drive 1,000 signups for Base App"
+                            value={objective}
+                            onChange={(e) => setObjective(e.target.value)}
+                            hint='Outcome + metric + timeframe (e.g., "Drive 1,000 signups in 14 days").'
                           />
                           <Input
-                            label="Deadline (days)"
-                            placeholder="7"
-                            inputMode="numeric"
-                            value={deadlineDays}
-                            onChange={(e) => setDeadlineDays(e.target.value)}
-                            leftIcon={<Clock className="w-4 h-4" />}
+                            label="Audience"
+                            placeholder="e.g., Base App creators shipping weekly"
+                            value={audience}
+                            onChange={(e) => setAudience(e.target.value)}
+                            hint='Role + stage + context (e.g., "Indie devs pre-launch on Base"). Recommended: add who this is for.'
                           />
                         </div>
 
+                        {/* Row 2: Budget + Tone */}
+                        <div className="grid gap-6 sm:grid-cols-2">
+                          <div>
+                            <Input
+                              label="Budget (USDC)"
+                              placeholder="e.g., 500"
+                              inputMode="decimal"
+                              value={budgetUsdc}
+                              onChange={(e) => setBudgetUsdc(e.target.value)}
+                              hint='Number only (e.g., "500" = 500 USDC escrowed onchain).'
+                            />
+                            <p className="mt-1 text-xs text-gray-500">Recommended: set an escrow amount.</p>
+                          </div>
+                          <Input
+                            label="Tone"
+                            placeholder="confident, concise, onchain-native"
+                            value={tone}
+                            onChange={(e) => setTone(e.target.value)}
+                            hint='2–3 adjectives (e.g., "confident, concise, playful").'
+                          />
+                        </div>
+
+                        {/* Row 3: Primary CTA + Constraints */}
+                        <div className="grid gap-6 sm:grid-cols-2">
+                          <div>
+                            <Input
+                              label="Primary CTA"
+                              placeholder="Try the demo"
+                              value={cta}
+                              onChange={(e) => setCta(e.target.value)}
+                              hint='One action (e.g., "Try the demo", "Sign up", "Mint").'
+                            />
+                          </div>
+                          <div>
+                            <Input
+                              label="Constraints"
+                              placeholder="e.g., no paid influencers; 2-week timeline; no AI claims"
+                              value={constraints}
+                              onChange={(e) => setConstraints(e.target.value)}
+                              hint='Hard rules (e.g., "no paid influencers", "2-week timeline").'
+                            />
+                            <p className="mt-1 text-xs text-gray-500">Recommended: add any hard rules.</p>
+                          </div>
+                        </div>
+
+                        {/* Publisher Address */}
                         <ENSInput
                           label="Publisher Address"
                           placeholder="vitalik.eth or 0x..."
@@ -493,6 +534,11 @@ export default function Home() {
                           }}
                           hint="Supports ENS names - the publisher receives funds on completion"
                         />
+
+                        {/* Workflow hint */}
+                        <p className="text-sm text-gray-500">
+                          Polite AI workflow: generate suggestions → edit → lock to hash → sign the onchain tx.
+                        </p>
 
                         <div className="pt-4">
                           <ShimmerButton
