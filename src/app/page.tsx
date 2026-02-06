@@ -319,12 +319,18 @@ export default function Home() {
       },
       {
         id: 2,
-        title: "Deposit",
-        description: "Escrow Budget",
+        title: "Generate",
+        description: "AI Content",
         status: isCreated ? "active" : "pending",
       },
       {
         id: 3,
+        title: "Fund",
+        description: "Escrow Budget",
+        status: "pending",
+      },
+      {
+        id: 4,
         title: "Release",
         description: "Milestones",
         status: "pending",
@@ -706,15 +712,15 @@ export default function Home() {
           />
           <FlowCard
             step="02"
-            title="Deposit"
-            description="Escrow budget onchain."
-            cta="Fund"
-          />
-          <FlowCard
-            step="03"
             title="Generate"
             description="AI creates content."
             cta="Auto"
+          />
+          <FlowCard
+            step="03"
+            title="Fund"
+            description="Escrow budget onchain."
+            cta="Fund"
           />
           <FlowCard
             step="04"
