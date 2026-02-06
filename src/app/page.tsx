@@ -238,7 +238,7 @@ export default function Home() {
         toastError("Vault contract address not configured");
         return;
       }
-      if (!isAddress(publisher)) throw new Error("Invalid publisher address");
+      if (!address) throw new Error("Wallet not connected");
       if (!budgetUnits) throw new Error("Invalid budget amount");
       if (!metadataHash) throw new Error("Campaign objective required");
 
@@ -247,11 +247,14 @@ export default function Home() {
       const deadline =
         BigInt(Math.floor(Date.now() / 1000)) + BigInt(Math.floor(days * 86400));
 
+      // Use connected wallet address as default publisher
+      const publisherAddress = publisher && isAddress(publisher) ? publisher : address;
+
       await writeContractAsync({
         address: vaultAddress,
         abi: campaignVaultAbi,
         functionName: "createCampaign",
-        args: [publisher, budgetUnits, deadline, metadataHash],
+        args: [publisherAddress, budgetUnits, deadline, metadataHash],
         chainId: BASE_SEPOLIA_CHAIN_ID,
       });
       toastInfo("Transaction submitted! Waiting for confirmation...");
