@@ -1,0 +1,39 @@
+# UX Revamp Implementation Plan
+
+## Goal
+Maximize user experience by introducing a global notification system (Toasts) and smooth cinematic transitions between workflow steps.
+
+## Proposed Changes
+
+### 1. Global Toast System
+Create a robust Toast notification system to replace inline error messages and provide non-intrusive feedback.
+
+#### [NEW] `src/contexts/ToastContext.tsx`
+- **ToastProvider**: Context to manage toast state queue.
+- **ToastComponent**: UI component using Aceternity-style glassmorphism.
+- **Hooks**: `useToast()` for easy dispatching from any component.
+- **Animations**: Slide-in/slide-out using framer-motion.
+
+### 2. Smooth Step Transitions
+Refactor [page.tsx](file:///Users/fabiomaulana/.gemini/antigravity/scratch/base-campaign-vault-agent/src/app/page.tsx) to use Framer Motion's `AnimatePresence` for seamless transitions between wizard steps.
+
+#### [MODIFY] [src/app/page.tsx](file:///Users/fabiomaulana/.gemini/antigravity/scratch/base-campaign-vault-agent/src/app/page.tsx)
+- Wrap step content in `<motion.div>` with `initial`, `animate`, `exit` variants.
+- Implement "slide left" vs "slide right" depending on navigation direction.
+- Replace static error/success divs with `toast.error()` and `toast.success()` calls.
+
+### 3. Stepper Enhancements
+#### [MODIFY] [src/components/campaign/Stepper.tsx](file:///Users/fabiomaulana/.gemini/antigravity/scratch/base-campaign-vault-agent/src/components/campaign/Stepper.tsx)
+- Add layout animations to the progress bar itself.
+- Ensure the active step "glow" animates smoothly to the new position.
+
+## Verification Plan
+
+### Manual Verification
+1. **Toast Test**:
+   - Trigger an error (e.g., empty budget) -> Verify red error toast slides in.
+   - Complete a transaction -> Verify green success toast.
+   - Verify toasts auto-dismiss after 5 seconds.
+2. **Transition Test**:
+   - Click "Create Campaign" -> Verify the current step slides out left and the next step slides in from right.
+   - Click back (stepper nav) -> Verify reverse animation direction.

@@ -1,0 +1,296 @@
+# UI/UX Contribution Plan: Base Campaign Vault Agent
+
+> **ETHGlobal Hackathon** | UI Branch: `UI`  
+> Repository: [myreceiptt/base-campaign-vault-agent](https://github.com/myreceiptt/base-campaign-vault-agent)
+
+## Project Overview
+
+**Base Campaign Vault Agent** helps Base App creators and brands run paid campaigns with USDC escrow. The core user flow is:
+1. **Create Campaign** → Define objective, audience, success metrics
+2. **Deposit** → Lock budget into onchain escrow vault
+3. **Generate Content** → AI drafts campaign assets
+4. **Release** → Publish and release funds based on milestones
+
+### Current Tech Stack
+- **Framework**: Next.js 16 (App Router) + TypeScript
+- **Styling**: Tailwind CSS 4
+- **Web3**: RainbowKit + wagmi + viem
+- **Chain**: Base Sepolia (testnet)
+
+---
+
+## Current State Analysis
+
+### Screenshots of Current UI
+
+````carousel
+![Desktop View - Top Section](/Users/fabiomaulana/.gemini/antigravity/brain/aea11c07-59c3-45ce-a914-8e19dc69157f/desktop_home_top_1770162096681.png)
+<!-- slide -->
+![Desktop View - Bottom Section](/Users/fabiomaulana/.gemini/antigravity/brain/aea11c07-59c3-45ce-a914-8e19dc69157f/desktop_home_bottom_1770162104061.png)
+<!-- slide -->
+![Mobile View - Top](/Users/fabiomaulana/.gemini/antigravity/brain/aea11c07-59c3-45ce-a914-8e19dc69157f/mobile_home_top_1770162136825.png)
+<!-- slide -->
+![Mobile View - Bottom](/Users/fabiomaulana/.gemini/antigravity/brain/aea11c07-59c3-45ce-a914-8e19dc69157f/mobile_home_bottom_1770162139327.png)
+````
+
+### Current Issues Identified
+
+| Issue | Description | Priority |
+|-------|-------------|----------|
+| 🔴 **Redundant UI** | Action buttons and feature cards serve similar purposes, causing confusion | High |
+| 🔴 **No Visual Feedback** | No loading states, transaction progress, or toast notifications | High |
+| 🟡 **Basic Styling** | Plain form inputs and generic monochrome palette | Medium |
+| 🟡 **No Stepper Component** | Linear flow (1→2→3→4) not visually guided | Medium |
+| 🟡 **Empty AI Interface** | "Generate Content" is placeholder only | Medium |
+| 🟢 **Responsive Works** | Mobile layout stacks correctly | Low |
+
+---
+
+## Proposed UI/UX Enhancements
+
+### Priority 1: Design System Foundation
+
+> **Goal**: Create a cohesive, modern visual identity aligned with Base/Coinbase aesthetics
+
+#### Color Palette (Base-inspired)
+```css
+/* Primary Colors */
+--base-blue: #0052FF;        /* Base brand blue */
+--base-blue-light: #6690FF;
+--base-blue-dark: #003BB2;
+
+/* Semantic Colors */  
+--success: #10B981;          /* Green for completed steps */
+--warning: #F59E0B;          /* Yellow for pending/awaiting */
+--error: #EF4444;            /* Red for errors */
+--info: #3B82F6;
+
+/* Neutral Palette */
+--zinc-950: #09090B;         /* Dark background */
+--zinc-900: #18181B;         /* Card backgrounds */
+--zinc-800: #27272A;         /* Borders */
+--zinc-400: #A1A1AA;         /* Muted text */
+--zinc-50: #FAFAFA;          /* Light text */
+```
+
+#### Typography
+- **Headings**: Geist Sans (already in use) - clean, modern
+- **Body**: Inter or keep Geist Sans
+- **Monospace**: Geist Mono for addresses/code
+
+---
+
+### Priority 2: Stepper Component
+
+> **Goal**: Guide users through the 4-step campaign lifecycle
+
+```
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│  01 Create  │───→│  02 Deposit │───→│ 03 Generate │───→│ 04 Release  │
+│   Campaign  │    │    USDC     │    │   Content   │    │    Funds    │
+├─────────────┤    ├─────────────┤    ├─────────────┤    ├─────────────┤
+│  ● Active   │    │  ○ Pending  │    │  ○ Pending  │    │  ○ Pending  │
+└─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
+```
+
+**Features**:
+- Visual progress indicator
+- Click to navigate between completed steps
+- Status badges (Active, Completed, Pending, Locked)
+- Smooth transitions between steps
+
+---
+
+### Priority 3: Enhanced Form Components
+
+> **Goal**: Modern, accessible form inputs with better UX
+
+**Improvements**:
+- Floating labels or animated placeholders
+- Input validation with inline error messages
+- Currency input with USDC icon and formatting
+- Address input with ENS resolution / avatar support
+- Date picker with calendar modal
+- Character counters for text inputs
+
+---
+
+### Priority 4: Transaction Feedback
+
+> **Goal**: Clear visual feedback for all blockchain interactions
+
+**Components to Add**:
+1. **Toast Notifications** - Success, error, pending states
+2. **Transaction Modal** - Show tx hash, explorer link, progress
+3. **Loading States** - Skeleton loaders for data fetching
+4. **Button States** - Loading spinners, disabled states
+
+---
+
+### Priority 5: Dashboard Layout Redesign
+
+> **Goal**: Clean, focused interface that reduces cognitive load
+
+**Proposed Layout**:
+```
+┌─────────────────────────────────────────────────────────────┐
+│  [Logo]                              [Network] [Wallet]     │  ← Navbar
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌────────────────────────────────────────────────────┐    │
+│  │         [1] ──── [2] ──── [3] ──── [4]            │    │  ← Stepper
+│  └────────────────────────────────────────────────────┘    │
+│                                                             │
+│  ┌────────────────────────────────────────────────────┐    │
+│  │                                                    │    │
+│  │              ACTIVE STEP CONTENT                  │    │  ← Main Card
+│  │                                                    │    │
+│  │  [Form fields / AI chat / Status display]         │    │
+│  │                                                    │    │
+│  │                         [Primary CTA Button]      │    │
+│  └────────────────────────────────────────────────────┘    │
+│                                                             │
+│  ┌──────────────────┐  ┌──────────────────────────────┐    │
+│  │  Campaign Info   │  │     Transaction History      │    │  ← Side panels
+│  │  • Budget locked │  │  • Tx 1: Created...          │    │
+│  │  • Publisher...  │  │  • Tx 2: Deposited...        │    │
+│  └──────────────────┘  └──────────────────────────────┘    │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### Priority 6: AI Content Generation Interface
+
+> **Goal**: Interactive chat-like interface for AI campaign generation
+
+**Features**:
+- Chat bubble UI for AI conversation
+- Campaign objective displayed as context
+- Generated content preview cards
+- Copy/Edit/Regenerate actions
+- Export to various formats (Twitter, Instagram, etc.)
+
+---
+
+## Implementation Roadmap
+
+### Phase 1: Foundation (2-3 hours)
+- [ ] Set up design tokens in `globals.css`
+- [ ] Create reusable Button component with variants
+- [ ] Create Card component with glass morphism effect
+- [ ] Create Input components with floating labels
+- [ ] Add toast notification system
+
+### Phase 2: Core Components (2-3 hours)
+- [ ] Build Stepper component
+- [ ] Implement step navigation logic
+- [ ] Create transaction status modal
+- [ ] Add loading skeleton components
+
+### Phase 3: Page Redesign (3-4 hours)
+- [ ] Redesign main page layout
+- [ ] Implement Step 1: Create Campaign form
+- [ ] Implement Step 2: Deposit flow with approve/deposit
+- [ ] Implement Step 3: AI content generation UI
+- [ ] Implement Step 4: Release/milestone tracking
+
+### Phase 4: Polish (1-2 hours)
+- [ ] Add micro-animations and transitions
+- [ ] Improve mobile responsiveness
+- [ ] Add dark mode toggle (if not auto-detecting)
+- [ ] Review accessibility (a11y)
+
+---
+
+## Quick Start: Getting Started
+
+### 1. Clone and Setup
+```bash
+# Clone the repository
+git clone https://github.com/myreceiptt/base-campaign-vault-agent.git
+cd base-campaign-vault-agent
+
+# Checkout UI branch
+git checkout UI
+
+# Install dependencies
+npm install
+
+# Copy environment variables
+cp .env.local.example .env.local
+
+# Start development server
+npm run dev
+```
+
+### 2. Environment Variables Needed
+```bash
+NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=your_project_id
+NEXT_PUBLIC_VAULT=0x316c82205681B098d6a6b6Ac1fa221074F62E2E3
+```
+
+### 3. Key Files to Modify
+| File | Purpose |
+|------|---------|
+| `src/app/globals.css` | Design tokens, custom CSS |
+| `src/app/page.tsx` | Main page component |
+| `src/app/providers.tsx` | Web3 providers |
+| `src/components/` | Create this folder for reusable components |
+
+---
+
+## Suggested File Structure
+
+```
+src/
+├── app/
+│   ├── globals.css        # Design tokens + global styles
+│   ├── layout.tsx         # Root layout
+│   ├── page.tsx           # Main dashboard
+│   └── providers.tsx      # RainbowKit + wagmi providers
+├── components/
+│   ├── ui/                # Reusable UI primitives
+│   │   ├── Button.tsx
+│   │   ├── Card.tsx
+│   │   ├── Input.tsx
+│   │   ├── Toast.tsx
+│   │   └── Skeleton.tsx
+│   ├── campaign/          # Campaign-specific components
+│   │   ├── Stepper.tsx
+│   │   ├── CreateCampaignForm.tsx
+│   │   ├── DepositFlow.tsx
+│   │   ├── ContentGenerator.tsx
+│   │   └── ReleasePanel.tsx
+│   └── layout/            # Layout components
+│       ├── Navbar.tsx
+│       └── CampaignCard.tsx
+├── hooks/                 # Custom React hooks
+│   ├── useCampaign.ts
+│   └── useVaultContract.ts
+└── lib/                   # Utilities
+    ├── contracts.ts       # Contract ABIs and addresses
+    └── utils.ts           # Helper functions
+```
+
+---
+
+## User Review Required
+
+> [!IMPORTANT]  
+> Before starting implementation, please confirm:
+> 
+> 1. **Design Direction**: Do you prefer the Base-blue themed design or a different color scheme?
+> 2. **Component Library**: Should we use any existing UI library (shadcn/ui, Radix) or build from scratch with Tailwind?
+> 3. **Scope for Hackathon**: Which features are must-haves vs nice-to-haves given time constraints?
+> 4. **AI Integration**: Is there any existing AI/agent code in the repo, or is the "Generate Content" step purely frontend for now?
+
+---
+
+## Resources
+
+- [Base Brand Guidelines](https://base.org/brand-kit)
+- [RainbowKit Docs](https://www.rainbowkit.com/docs)
+- [Tailwind CSS 4 Docs](https://tailwindcss.com/docs)
+- [wagmi Docs](https://wagmi.sh/)

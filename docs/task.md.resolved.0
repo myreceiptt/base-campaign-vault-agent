@@ -1,0 +1,43 @@
+# Task: UI/UX Contribution to Base Campaign Vault Agent
+
+## Overview
+Contributing UI/UX improvements to the Base Campaign Vault Agent for ETHGlobal hackathon.
+
+## Planning
+- [x] Research repository and understand codebase
+- [x] Explore live demo and capture screenshots
+- [x] Identify UI/UX issues and improvement areas
+- [x] Create implementation plan
+- [ ] Get user approval on plan and scope
+
+## Phase 1: Foundation
+- [ ] Set up design tokens in `globals.css`
+- [ ] Create Button component with variants
+- [ ] Create Card component with glass morphism
+- [ ] Create Input components with floating labels
+- [ ] Add toast notification system
+
+## Phase 2: Core Components
+- [ ] Build Stepper component
+- [ ] Implement step navigation logic
+- [ ] Create transaction status modal
+- [ ] Add loading skeleton components
+
+## Phase 3: Page Redesign
+- [ ] Redesign main page layout
+- [ ] Implement Step 1: Create Campaign form
+- [ ] Implement Step 2: Deposit flow
+- [ ] Implement Step 3: AI content generation UI
+- [ ] Implement Step 4: Release/milestone tracking
+
+## Phase 4: Polish
+- [ ] Add micro-animations and transitions
+- [ ] Improve mobile responsiveness
+- [ ] Add dark mode toggle
+- [ ] Review accessibility (a11y)
+
+## Verification
+- [ ] Run build to ensure no TypeScript errors
+- [ ] Test on desktop and mobile viewports
+- [ ] Test wallet connection flow
+- [ ] Commit and push to UI branch
