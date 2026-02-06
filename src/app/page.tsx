@@ -479,8 +479,36 @@ export default function Home() {
                           />
                         </div>
 
-                        {/* Row 2: Budget + Tone */}
+                        {/* Row 2: Primary CTA + Tone */}
                         <div className="grid gap-6 sm:grid-cols-2">
+                          <Input
+                            label="Primary CTA"
+                            placeholder="Try the demo"
+                            value={cta}
+                            onChange={(e) => setCta(e.target.value)}
+                            hint='One action (e.g., "Try the demo", "Sign up", "Mint").'
+                          />
+                          <Input
+                            label="Tone"
+                            placeholder="confident, concise, onchain-native"
+                            value={tone}
+                            onChange={(e) => setTone(e.target.value)}
+                            hint='2–3 adjectives (e.g., "confident, concise, playful").'
+                          />
+                        </div>
+
+                        {/* Row 3: Constraints + Budget */}
+                        <div className="grid gap-6 sm:grid-cols-2">
+                          <div>
+                            <Input
+                              label="Constraints"
+                              placeholder="e.g., no paid influencers; 2-week timeline; no AI claims"
+                              value={constraints}
+                              onChange={(e) => setConstraints(e.target.value)}
+                              hint='Hard rules (e.g., "no paid influencers", "2-week timeline").'
+                            />
+                            <p className="mt-1 text-xs text-gray-500">Recommended: add any hard rules.</p>
+                          </div>
                           <div>
                             <Input
                               label="Budget (USDC)"
@@ -491,36 +519,6 @@ export default function Home() {
                               hint='Number only (e.g., "500" = 500 USDC escrowed onchain).'
                             />
                             <p className="mt-1 text-xs text-gray-500">Recommended: set an escrow amount.</p>
-                          </div>
-                          <Input
-                            label="Tone"
-                            placeholder="confident, concise, onchain-native"
-                            value={tone}
-                            onChange={(e) => setTone(e.target.value)}
-                            hint='2–3 adjectives (e.g., "confident, concise, playful").'
-                          />
-                        </div>
-
-                        {/* Row 3: Primary CTA + Constraints */}
-                        <div className="grid gap-6 sm:grid-cols-2">
-                          <div>
-                            <Input
-                              label="Primary CTA"
-                              placeholder="Try the demo"
-                              value={cta}
-                              onChange={(e) => setCta(e.target.value)}
-                              hint='One action (e.g., "Try the demo", "Sign up", "Mint").'
-                            />
-                          </div>
-                          <div>
-                            <Input
-                              label="Constraints"
-                              placeholder="e.g., no paid influencers; 2-week timeline; no AI claims"
-                              value={constraints}
-                              onChange={(e) => setConstraints(e.target.value)}
-                              hint='Hard rules (e.g., "no paid influencers", "2-week timeline").'
-                            />
-                            <p className="mt-1 text-xs text-gray-500">Recommended: add any hard rules.</p>
                           </div>
                         </div>
 
@@ -803,10 +801,10 @@ export default function Home() {
                           <p className="text-gray-200 line-clamp-2">{audience}</p>
                         </div>
                       )}
-                      {budgetUsdc && (
+                      {cta && (
                         <div>
-                          <p className="text-gray-500 mb-1">Budget</p>
-                          <p className="text-2xl font-bold gradient-text-hero">{budgetUsdc} USDC</p>
+                          <p className="text-gray-500 mb-1">Primary CTA</p>
+                          <p className="text-gray-200">{cta}</p>
                         </div>
                       )}
                       {tone && (
@@ -815,16 +813,16 @@ export default function Home() {
                           <p className="text-gray-200">{tone}</p>
                         </div>
                       )}
-                      {cta && (
-                        <div>
-                          <p className="text-gray-500 mb-1">Primary CTA</p>
-                          <p className="text-gray-200">{cta}</p>
-                        </div>
-                      )}
                       {constraints && (
                         <div>
                           <p className="text-gray-500 mb-1">Constraints</p>
                           <p className="text-gray-200 line-clamp-2">{constraints}</p>
+                        </div>
+                      )}
+                      {budgetUsdc && (
+                        <div>
+                          <p className="text-gray-500 mb-1">Budget</p>
+                          <p className="text-2xl font-bold gradient-text-hero">{budgetUsdc} USDC</p>
                         </div>
                       )}
                     </div>
