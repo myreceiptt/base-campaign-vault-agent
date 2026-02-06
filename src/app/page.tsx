@@ -125,6 +125,17 @@ export default function Home() {
   const [currentStep, setCurrentStep] = useState(1);
   const [direction, setDirection] = useState(0);
 
+  // AI Brief state
+  const [stepMode, setStepMode] = useState<"inputs" | "brief">("inputs");
+  const [aiBrief, setAiBrief] = useState("");
+  const [deliverables, setDeliverables] = useState<string[]>([]);
+  const [dos, setDos] = useState<string[]>([]);
+  const [donts, setDonts] = useState<string[]>([]);
+  const [budgetNotes, setBudgetNotes] = useState("");
+  const [isGeneratingBrief, setIsGeneratingBrief] = useState(false);
+  const [briefError, setBriefError] = useState<string | null>(null);
+  const [lockedMetadataHash, setLockedMetadataHash] = useState<`0x${string}` | null>(null);
+
   // Contract addresses
   const usdcAddress =
     (process.env.NEXT_PUBLIC_USDC as `0x${string}` | undefined) ??
@@ -336,6 +347,67 @@ export default function Home() {
       toastSuccess("Funds released successfully! Campaign completed.");
     }
   }, [currentStep, receipt.isSuccess, lastHash, toastSuccess]);
+
+  // AI Brief generation
+  async function onGenerateBrief() {
+    setBriefError(null);
+    const trimmedObjective = objective.trim();
+    if (!trimmedObjective || trimmedObjective.length < 15) {
+      setBriefError("Objective is too short. Aim for >= 15 characters or >= 5 words.");
+      return;
+    }
+
+    setIsGeneratingBrief(true);
+    try {
+      const res = await fetch("/api/brief", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          objective,
+          audience,
+          tone,
+          cta,
+          constraints,
+        }),
+      });
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(text || `HTTP ${res.status}`);
+      }
+
+      interface BriefResponse {
+        brief?: string;
+        deliverables?: string[];
+        do?: string[];
+        dont?: string[];
+        budgetNotes?: string;
+      }
+
+      const json = (await res.json()) as BriefResponse;
+      setAiBrief(json.brief ?? "");
+      setDeliverables(Array.isArray(json.deliverables) ? json.deliverables : []);
+      setDos(Array.isArray(json.do) ? json.do : []);
+      setDonts(Array.isArray(json.dont) ? json.dont : []);
+      setBudgetNotes(json.budgetNotes ?? "");
+      setStepMode("brief");
+    } catch (err) {
+      setBriefError((err as Error).message);
+    } finally {
+      setIsGeneratingBrief(false);
+    }
+  }
+
+  function onEditInputs() {
+    setStepMode("inputs");
+    setBriefError(null);
+    setLockedMetadataHash(null);
+    setAiBrief("");
+    setDeliverables([]);
+    setDos([]);
+    setDonts([]);
+    setBudgetNotes("");
+  }
 
   return (
     <div className="min-h-screen bg-[#030712] text-white overflow-hidden">
@@ -632,29 +704,119 @@ export default function Home() {
                     transition={{ duration: 0.4, ease: "anticipate" }}
                   >
                     <SpotlightCard className="p-8">
-                      <div className="flex flex-col items-center justify-center py-16 text-center">
-                        <div className="relative mb-8">
-                          <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-[#0052FF] to-[#1CD8D2] flex items-center justify-center animate-float">
-                            <Sparkles className="w-12 h-12 text-white" />
+                      {/* Header with mode buttons */}
+                      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-6">
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#0052FF] to-[#1CD8D2] flex items-center justify-center">
+                            <Sparkles className="w-6 h-6 text-white" />
                           </div>
-                          <div className="absolute -inset-4 rounded-3xl bg-gradient-to-br from-[#0052FF]/20 to-[#1CD8D2]/20 blur-xl -z-10" />
+                          <div>
+                            <h3 className="text-xl font-bold">AI Brief + Deliverables</h3>
+                            <p className="text-sm text-gray-400">
+                              The AI suggests. You can edit everything before locking it into `metadataHash`.
+                            </p>
+                            <p className="text-xs text-gray-500 mt-1">
+                              Mode: <span className="font-medium text-gray-400">{stepMode === "inputs" ? "Inputs" : "Brief"}</span>
+                              {stepMode === "inputs" ? " — generate a brief to start editing." : " — edit deliverables, then lock to hash."}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <ShimmerButton
+                            disabled={stepMode !== "inputs" || isGeneratingBrief || !objective.trim()}
+                            onClick={() => void onGenerateBrief()}
+                          >
+                            {isGeneratingBrief ? "Generating..." : "Generate Brief"}
+                          </ShimmerButton>
+                          <button
+                            className="px-4 py-2 rounded-lg border border-white/10 bg-white/5 text-sm font-medium hover:bg-white/10 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                            disabled={stepMode !== "brief" || isGeneratingBrief}
+                            onClick={onEditInputs}
+                          >
+                            Edit Inputs
+                          </button>
+                          <button
+                            className="px-4 py-2 rounded-lg border border-white/10 bg-white/5 text-sm font-medium hover:bg-white/10 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                            disabled={stepMode !== "brief" || !aiBrief.trim()}
+                            onClick={() => {
+                              setDirection(1);
+                              setCurrentStep(4);
+                            }}
+                          >
+                            Lock to Hash
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Error display */}
+                      {briefError && (
+                        <div className="mb-4 p-3 rounded-xl border border-red-900/40 bg-red-950/40 text-sm text-red-200">
+                          {briefError}
+                        </div>
+                      )}
+
+                      {/* Brief textarea */}
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-400 mb-2">Brief</label>
+                          <Textarea
+                            placeholder="Generate a brief, then edit it here."
+                            value={aiBrief}
+                            onChange={(e) => setAiBrief(e.target.value)}
+                            disabled={stepMode !== "brief"}
+                          />
                         </div>
 
-                        <h3 className="text-2xl font-bold mb-3">
-                          <GradientText>AI Content Generation</GradientText>
-                        </h3>
-                        <p className="text-gray-400 max-w-md mb-8">
-                          Coming soon! The AI agent will analyze your campaign objective and generate
-                          ready-to-post content for various social platforms.
-                        </p>
+                        {/* Deliverables checklist */}
+                        <EditableList
+                          title="Deliverables checklist"
+                          items={deliverables}
+                          setItems={setDeliverables}
+                          placeholder="Add a deliverable..."
+                          disabled={stepMode !== "brief"}
+                        />
 
-                        <ShimmerButton onClick={() => {
-                          setDirection(1);
-                          setCurrentStep(4);
-                        }}>
-                          Continue to Release
-                          <ArrowRight className="w-4 h-4" />
-                        </ShimmerButton>
+                        {/* Do / Don't lists */}
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <EditableList
+                            title="Do"
+                            items={dos}
+                            setItems={setDos}
+                            placeholder="Add a do..."
+                            disabled={stepMode !== "brief"}
+                          />
+                          <EditableList
+                            title="Don't"
+                            items={donts}
+                            setItems={setDonts}
+                            placeholder="Add a don't..."
+                            disabled={stepMode !== "brief"}
+                          />
+                        </div>
+
+                        {/* metadataHash display */}
+                        <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium">metadataHash (locked)</span>
+                            <span className="text-xs text-gray-500">
+                              {lockedMetadataHash ? lockedMetadataHash.slice(0, 10) + "..." : "Not locked yet."}
+                            </span>
+                          </div>
+                          {lockedMetadataHash && (
+                            <p className="mt-2 text-xs text-gray-500 font-mono break-all">{lockedMetadataHash}</p>
+                          )}
+                        </div>
+
+                        {/* Continue button */}
+                        <div className="flex justify-end pt-4">
+                          <ShimmerButton onClick={() => {
+                            setDirection(1);
+                            setCurrentStep(4);
+                          }}>
+                            Continue to Release
+                            <ArrowRight className="w-4 h-4" />
+                          </ShimmerButton>
+                        </div>
                       </div>
                     </SpotlightCard>
                   </motion.div>
@@ -853,6 +1015,63 @@ export default function Home() {
           </div>
         </footer>
       </DotBackground>
+    </div>
+  );
+}
+
+// EditableList component for Deliverables, Do, Don't lists
+function EditableList(props: {
+  title: string;
+  items: string[];
+  setItems: (items: string[]) => void;
+  placeholder: string;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-sm font-medium">{props.title}</div>
+        <button
+          className="px-3 py-1.5 rounded-lg bg-white/10 text-sm font-medium hover:bg-white/20 transition disabled:opacity-50 disabled:cursor-not-allowed"
+          disabled={props.disabled}
+          onClick={() => props.setItems([...props.items, ""])}
+        >
+          Add
+        </button>
+      </div>
+
+      <div className="mt-3 flex flex-col gap-2">
+        {props.items.length === 0 ? (
+          <div className="text-sm text-gray-500">
+            {props.placeholder}
+          </div>
+        ) : null}
+        {props.items.map((item, idx) => (
+          <div key={idx} className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <Input
+              className="flex-1"
+              placeholder={props.placeholder}
+              value={item}
+              disabled={props.disabled}
+              onChange={(e) => {
+                const next = props.items.slice();
+                next[idx] = e.target.value;
+                props.setItems(next);
+              }}
+            />
+            <button
+              className="px-3 py-1.5 rounded-lg text-sm text-gray-400 hover:text-red-400 hover:bg-red-900/20 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={props.disabled}
+              onClick={() => {
+                const next = props.items.filter((_, i) => i !== idx);
+                props.setItems(next);
+              }}
+            >
+              Remove
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
