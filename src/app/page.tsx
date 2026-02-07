@@ -39,6 +39,7 @@ import { Input, Textarea } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { ShimmerButton } from "@/components/ui/MovingBorder";
 import { LiFiBridge } from "@/components/lifi-bridge";
+import { CampaignStatusTracker } from "@/components/campaign-status";
 import {
   FileText,
   Sparkles,
@@ -879,6 +880,11 @@ export default function Home() {
         {/* LI.FI Bridge Section */}
         <section className="mx-auto max-w-6xl px-6 pb-8">
           <LiFiBridge />
+        </section>
+
+        {/* Campaign Status Tracker Section */}
+        <section className="mx-auto max-w-6xl px-6 pb-8">
+          <CampaignStatusTracker />
         </section>
 
         {/* Footer */}
