@@ -40,6 +40,7 @@ import { Button } from "@/components/ui/Button";
 import { ShimmerButton } from "@/components/ui/MovingBorder";
 import { LiFiBridge } from "@/components/lifi-bridge";
 import { CampaignStatusTracker } from "@/components/campaign-status";
+import { ContentGenerator } from "@/components/content-generator";
 import {
   FileText,
   Sparkles,
@@ -885,6 +886,19 @@ export default function Home() {
         {/* Campaign Status Tracker Section */}
         <section className="mx-auto max-w-6xl px-6 pb-8">
           <CampaignStatusTracker />
+        </section>
+
+        {/* AI Content Generator Section */}
+        <section className="mx-auto max-w-6xl px-6 pb-8">
+          <ContentGenerator
+            brief={aiBrief}
+            deliverables={deliverables}
+            objective={objective}
+            audience={audience}
+            tone={tone}
+            cta={cta}
+            isLocked={!!lockedMetadataHash}
+          />
         </section>
 
         {/* Footer */}
