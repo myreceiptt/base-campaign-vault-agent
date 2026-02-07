@@ -20,10 +20,35 @@ export const campaignVaultAbi = [
   },
   {
     type: "function",
+    name: "markDelivered",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "campaignId", type: "uint256" },
+      { name: "proofHash", type: "bytes32" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function",
     name: "release",
     stateMutability: "nonpayable",
     inputs: [{ name: "campaignId", type: "uint256" }],
     outputs: [],
+  },
+  {
+    type: "function",
+    name: "campaigns",
+    stateMutability: "view",
+    inputs: [{ name: "campaignId", type: "uint256" }],
+    outputs: [
+      { name: "advertiser", type: "address" },
+      { name: "publisher", type: "address" },
+      { name: "budget", type: "uint256" },
+      { name: "deadline", type: "uint64" },
+      { name: "status", type: "uint8" },
+      { name: "metadataHash", type: "bytes32" },
+      { name: "proofHash", type: "bytes32" },
+    ],
   },
   {
     type: "event",
@@ -39,4 +64,3 @@ export const campaignVaultAbi = [
     anonymous: false,
   },
 ] as const;
-

@@ -1,30 +1,35 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useAccount, useChainId, useSwitchChain, useSendTransaction, useWaitForTransactionReceipt } from "wagmi";
 import { parseUnits, formatUnits } from "viem";
-import { ArrowRightLeft, Loader2, CheckCircle, ExternalLink, AlertCircle } from "lucide-react";
+import { ArrowRightLeft, Loader2, CheckCircle, ExternalLink, AlertCircle, Info } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { SpotlightCard } from "@/components/ui/Spotlight";
 
-// LI.FI Supported chains for bridging to Base
+// LI.FI Staging API supports testnets!
+// Production: https://li.quest
+// Staging (testnets): https://staging.li.quest
+const LIFI_API_URL = "https://staging.li.quest";
+
+// Testnet chains supported by LI.FI staging
 const SUPPORTED_SOURCE_CHAINS = [
-    { id: 1, name: "Ethereum", logo: "🔷" },
-    { id: 42161, name: "Arbitrum", logo: "🔵" },
-    { id: 10, name: "Optimism", logo: "🔴" },
+    { id: 11155111, name: "Sepolia", logo: "🔷" },
+    { id: 421614, name: "Arbitrum Sepolia", logo: "🔵" },
+    { id: 11155420, name: "Optimism Sepolia", logo: "🔴" },
 ];
 
-const BASE_CHAIN_ID = 8453;
+// Destination: Base Sepolia
 const BASE_SEPOLIA_CHAIN_ID = 84532;
 
-// USDC token addresses on different chains
+// USDC token addresses on testnets
+// Note: These are testnet USDC - may need to be updated based on actual deployed addresses
 const USDC_ADDRESSES: Record<number, string> = {
-    1: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", // Ethereum
-    42161: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", // Arbitrum
-    10: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85", // Optimism
-    8453: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", // Base
-    84532: "0x036CbD53842c5426634e7929541eC2318f3dCF7e", // Base Sepolia
+    11155111: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238", // Sepolia USDC (Circle's testnet)
+    421614: "0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d", // Arbitrum Sepolia USDC
+    11155420: "0x5fd84259d66Cd46123540766Be93DFE6D43130D7", // Optimism Sepolia USDC
+    84532: "0x036CbD53842c5426634e7929541eC2318f3dCF7e", // Base Sepolia USDC
 };
 
 interface BridgeQuote {
@@ -64,7 +69,7 @@ export function LiFiBridge({ onBridgeComplete }: { onBridgeComplete?: () => void
     const { switchChain } = useSwitchChain();
 
     // Form state
-    const [sourceChain, setSourceChain] = useState(42161); // Default: Arbitrum
+    const [sourceChain, setSourceChain] = useState(11155111); // Default: Sepolia testnet
     const [amount, setAmount] = useState("");
     const [quote, setQuote] = useState<BridgeQuote | null>(null);
     const [isGettingQuote, setIsGettingQuote] = useState(false);
@@ -92,7 +97,7 @@ export function LiFiBridge({ onBridgeComplete }: { onBridgeComplete?: () => void
             const fromAmount = parseUnits(amount, 6).toString(); // USDC has 6 decimals
             const params = new URLSearchParams({
                 fromChain: sourceChain.toString(),
-                toChain: BASE_SEPOLIA_CHAIN_ID.toString(), // Bridge to Base Sepolia for testing
+                toChain: BASE_SEPOLIA_CHAIN_ID.toString(), // Bridge to Base Sepolia using staging API
                 fromToken: USDC_ADDRESSES[sourceChain],
                 toToken: USDC_ADDRESSES[BASE_SEPOLIA_CHAIN_ID],
                 fromAmount,
@@ -100,7 +105,7 @@ export function LiFiBridge({ onBridgeComplete }: { onBridgeComplete?: () => void
                 integrator: "campaign-vault-agent",
             });
 
-            const response = await fetch(`https://li.quest/v1/quote?${params}`);
+            const response = await fetch(`${LIFI_API_URL}/v1/quote?${params}`);
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
@@ -162,7 +167,7 @@ export function LiFiBridge({ onBridgeComplete }: { onBridgeComplete?: () => void
                     txHash,
                 });
 
-                const response = await fetch(`https://li.quest/v1/status?${params}`);
+                const response = await fetch(`${LIFI_API_URL}/v1/status?${params}`);
                 const status: BridgeStatus = await response.json();
                 setBridgeStatus(status);
 
@@ -210,6 +215,27 @@ export function LiFiBridge({ onBridgeComplete }: { onBridgeComplete?: () => void
             <p className="text-sm text-gray-400 mb-4">
                 Bridge USDC from other chains to fund your campaign
             </p>
+
+            {/* Mainnet Only Disclaimer */}
+            <div className="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                <div className="flex items-start gap-2">
+                    <Info className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" />
+                    <div>
+                        <p className="text-sm font-medium text-amber-400">Mainnet Only</p>
+                        <p className="text-xs text-amber-400/70 mt-1">
+                            LI.FI bridging works on mainnet only. For testnet, get USDC directly from{" "}
+                            <a
+                                href="https://faucet.circle.com/"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="underline hover:text-amber-300"
+                            >
+                                Circle Faucet
+                            </a>
+                        </p>
+                    </div>
+                </div>
+            </div>
 
             {/* Source Chain Selection */}
             <div className="mb-4">

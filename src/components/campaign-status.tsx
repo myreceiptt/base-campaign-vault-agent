@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useReadContract } from "wagmi";
-import { formatUnits } from "viem";
+import { useState } from "react";
+import { useReadContract, useWriteContract, useWaitForTransactionReceipt, useAccount } from "wagmi";
+import { formatUnits, keccak256, toHex } from "viem";
 import {
     Search,
     CheckCircle,
@@ -15,6 +15,7 @@ import {
     Send,
     RefreshCw,
     ExternalLink,
+    Loader2,
 } from "lucide-react";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
@@ -94,6 +95,7 @@ export function CampaignStatusTracker() {
     const [campaignIdInput, setCampaignIdInput] = useState("");
     const [queriedCampaignId, setQueriedCampaignId] = useState<bigint | null>(null);
 
+    const { address } = useAccount();
     const vaultAddress = process.env.NEXT_PUBLIC_VAULT as `0x${string}` | undefined;
 
     // Read campaign data from contract
@@ -113,14 +115,69 @@ export function CampaignStatusTracker() {
         },
     });
 
-    // Parse the campaign data
-    const campaign = campaignData as CampaignData | undefined;
+    // Write contract for marking delivered
+    const {
+        writeContract: markDelivered,
+        data: markDeliveredHash,
+        isPending: isMarkingDelivered,
+        error: markDeliveredError,
+    } = useWriteContract();
+
+    // Wait for mark delivered transaction
+    const { isLoading: isConfirmingDelivery, isSuccess: isDeliveryConfirmed } = useWaitForTransactionReceipt({
+        hash: markDeliveredHash,
+    });
+
+    // Parse the campaign data - wagmi returns struct as tuple array
+    // [advertiser, publisher, budget, deadline, status, metadataHash, proofHash]
+    const campaign = campaignData
+        ? {
+            advertiser: (campaignData as readonly unknown[])[0] as `0x${string}`,
+            publisher: (campaignData as readonly unknown[])[1] as `0x${string}`,
+            budget: (campaignData as readonly unknown[])[2] as bigint,
+            deadline: (campaignData as readonly unknown[])[3] as bigint,
+            status: Number((campaignData as readonly unknown[])[4]),
+            metadataHash: (campaignData as readonly unknown[])[5] as `0x${string}`,
+            proofHash: (campaignData as readonly unknown[])[6] as `0x${string}`,
+        }
+        : undefined;
+
     const currentStatus = campaign?.status ?? CampaignStatus.NONE;
     const statusConfig = STATUS_CONFIG[currentStatus as CampaignStatus];
     const StatusIcon = statusConfig.icon;
 
     // Check if campaign was refunded (special branch)
     const wasRefunded = currentStatus === CampaignStatus.REFUNDED;
+
+    // Check if current user can mark as delivered 
+    // For demo: allow both publisher AND advertiser (same wallet testing)
+    // In production, this should only be the publisher
+    const isPublisher = address && campaign && campaign.publisher.toLowerCase() === address.toLowerCase();
+    const isAdvertiser = address && campaign && campaign.advertiser.toLowerCase() === address.toLowerCase();
+    const canMarkDelivered =
+        campaign &&
+        currentStatus === CampaignStatus.DEPOSITED &&
+        (isPublisher || isAdvertiser); // Allow either for demo
+
+    // Refetch when delivery is confirmed
+    if (isDeliveryConfirmed && currentStatus === CampaignStatus.DEPOSITED) {
+        refetch();
+    }
+
+    async function handleMarkDelivered() {
+        if (!vaultAddress || !queriedCampaignId) return;
+
+        // Generate a proof hash from timestamp + campaign id
+        const proofHash = keccak256(toHex(`proof-${queriedCampaignId}-${Date.now()}`));
+
+        markDelivered({
+            address: vaultAddress,
+            abi: campaignVaultAbi,
+            functionName: "markDelivered",
+            args: [queriedCampaignId, proofHash],
+            chainId: BASE_SEPOLIA_CHAIN_ID,
+        });
+    }
 
     function handleSearch() {
         const id = parseInt(campaignIdInput);
@@ -299,6 +356,61 @@ export function CampaignStatusTracker() {
                             <span className="text-sm text-red-400">
                                 This campaign was refunded to the advertiser
                             </span>
+                        </div>
+                    )}
+
+                    {/* Mark Delivered Button (for Publisher when status is DEPOSITED) */}
+                    {canMarkDelivered && (
+                        <div className="p-4 rounded-lg bg-purple-500/10 border border-purple-500/20">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="font-medium text-purple-400">Ready to mark as delivered?</p>
+                                    <p className="text-sm text-gray-400 mt-1">
+                                        Confirm that you have completed the campaign deliverables
+                                    </p>
+                                </div>
+                                <Button
+                                    onClick={handleMarkDelivered}
+                                    disabled={isMarkingDelivered || isConfirmingDelivery}
+                                    className="bg-purple-600 hover:bg-purple-700"
+                                >
+                                    {isMarkingDelivered ? (
+                                        <>
+                                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                            Confirm in Wallet...
+                                        </>
+                                    ) : isConfirmingDelivery ? (
+                                        <>
+                                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                            Confirming...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Package className="w-4 h-4 mr-2" />
+                                            Mark Delivered
+                                        </>
+                                    )}
+                                </Button>
+                            </div>
+                            {markDeliveredError && (
+                                <div className="flex items-center gap-2 mt-3 text-red-400 text-sm">
+                                    <AlertCircle className="w-4 h-4" />
+                                    {markDeliveredError.message.split("\n")[0]}
+                                </div>
+                            )}
+                            {markDeliveredHash && (
+                                <div className="flex items-center gap-2 mt-3 text-purple-400 text-sm">
+                                    <ExternalLink className="w-4 h-4" />
+                                    <a
+                                        href={getExplorerTxUrl(markDeliveredHash)}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="hover:underline"
+                                    >
+                                        View transaction
+                                    </a>
+                                </div>
+                            )}
                         </div>
                     )}
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { ConnectButton } from "@/components/connect-button";
 import { useMemo, useState, useEffect } from "react";
 import Image from "next/image";
 import {
@@ -22,7 +22,7 @@ import {
   useWaitForTransactionReceipt,
   useWriteContract,
 } from "wagmi";
-import { baseSepolia, mainnet } from "wagmi/chains";
+import { baseSepolia, mainnet, sepolia } from "wagmi/chains";
 import { campaignVaultAbi } from "@/lib/abi/campaignVault";
 import { erc20Abi } from "@/lib/abi/erc20";
 import { BASE_SEPOLIA_CHAIN_ID, getExplorerTxUrl } from "@/lib/onchain";
@@ -50,6 +50,7 @@ import {
   ChevronDown,
   Lock,
   User,
+  ArrowRightLeft,
 } from "lucide-react";
 
 type BriefResponse = {
@@ -118,7 +119,7 @@ export default function Home() {
   const isEnsName = publisher.includes(".") && !publisher.startsWith("0x");
   const { data: resolvedPublisherAddress, isLoading: isResolvingEns } = useEnsAddress({
     name: isEnsName ? publisher : undefined,
-    chainId: mainnet.id, // ENS resolution happens on mainnet
+    chainId: sepolia.id, // ENS resolution on Sepolia testnet
   });
 
   // Get the effective publisher address (resolved or raw input)
@@ -135,19 +136,19 @@ export default function Home() {
   // ENS Name lookup for advertiser (connected wallet)
   const { data: advertiserEnsName } = useEnsName({
     address: address,
-    chainId: mainnet.id,
+    chainId: mainnet.id, // ENS resolution on mainnet (where ENS names are registered)
   });
 
   // ENS Avatar for publisher (if resolved)
   const { data: publisherEnsAvatar } = useEnsAvatar({
     name: isEnsName ? publisher : undefined,
-    chainId: mainnet.id,
+    chainId: mainnet.id, // ENS resolution on mainnet
   });
 
   // ENS Avatar for advertiser
   const { data: advertiserEnsAvatar } = useEnsAvatar({
     name: advertiserEnsName ?? undefined,
-    chainId: mainnet.id,
+    chainId: mainnet.id, // ENS resolution on mainnet
   });
 
   const objectiveQuality = useMemo(() => analyzeObjective(objective), [objective]);
@@ -206,6 +207,35 @@ export default function Home() {
       enabled: allowanceEnabled,
     },
   });
+
+  // Read campaign status from contract
+  const campaignStatusQuery = useReadContract({
+    address: vaultAddress,
+    abi: campaignVaultAbi,
+    functionName: "campaigns",
+    args: campaignId ? [BigInt(campaignId)] : undefined,
+    chainId: BASE_SEPOLIA_CHAIN_ID,
+    query: {
+      enabled: Boolean(campaignId && vaultAddress),
+    },
+  });
+
+  // Parse campaign status - wagmi returns struct as tuple
+  const campaignOnchainStatus = useMemo(() => {
+    if (!campaignStatusQuery.data) return 0; // NONE
+    const statusIndex = 4; // status is at index 4 in tuple
+    return Number((campaignStatusQuery.data as readonly unknown[])[statusIndex]);
+  }, [campaignStatusQuery.data]);
+
+  // Status enum for display
+  const CAMPAIGN_STATUS = {
+    NONE: 0,
+    CREATED: 1,
+    DEPOSITED: 2,
+    DELIVERED: 3,
+    RELEASED: 4,
+    REFUNDED: 5,
+  } as const;
 
   const { writeContractAsync, data: lastHash, isPending, error } =
     useWriteContract();
@@ -293,6 +323,10 @@ export default function Home() {
     setDos([]);
     setDonts([]);
     setBudgetNotes("");
+    // Scroll back to Campaign Details section after state updates
+    setTimeout(() => {
+      document.getElementById("campaign-details")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 100);
   }
 
   function onLockToHash() {
@@ -354,6 +388,56 @@ export default function Home() {
     });
   }
 
+  // Combined function: approve (if needed) + deposit
+  async function onFundCampaign() {
+    if (!vaultAddress) return;
+    if (!campaignId) throw new Error("Campaign ID required");
+    if (!budgetUnits) throw new Error("Invalid budget");
+
+    // Check if we need to approve first
+    const currentAllowance = allowanceQuery.data ?? BigInt(0);
+    if (currentAllowance < budgetUnits) {
+      // First approve
+      await writeContractAsync({
+        address: usdcAddress,
+        abi: erc20Abi,
+        functionName: "approve",
+        args: [vaultAddress, budgetUnits],
+        chainId: BASE_SEPOLIA_CHAIN_ID,
+      });
+      // Wait a bit for the approval to be indexed
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+
+    // Then deposit
+    await writeContractAsync({
+      address: vaultAddress,
+      abi: campaignVaultAbi,
+      functionName: "deposit",
+      args: [BigInt(campaignId)],
+      chainId: BASE_SEPOLIA_CHAIN_ID,
+    });
+
+    // Refetch campaign status
+    campaignStatusQuery.refetch();
+  }
+
+  async function onMarkDelivered() {
+    if (!vaultAddress) return;
+    if (!campaignId) throw new Error("Campaign ID required");
+    // Generate a proof hash from timestamp + campaign id
+    const proofHash = keccak256(toHex(`proof-${campaignId}-${Date.now()}`));
+    await writeContractAsync({
+      address: vaultAddress,
+      abi: campaignVaultAbi,
+      functionName: "markDelivered",
+      args: [BigInt(campaignId), proofHash],
+      chainId: BASE_SEPOLIA_CHAIN_ID,
+    });
+    // Refetch campaign status
+    campaignStatusQuery.refetch();
+  }
+
   async function onRelease() {
     if (!vaultAddress) return;
     if (!campaignId) throw new Error("Campaign ID required");
@@ -364,7 +448,61 @@ export default function Home() {
       args: [BigInt(campaignId)],
       chainId: BASE_SEPOLIA_CHAIN_ID,
     });
+    // Refetch campaign status
+    campaignStatusQuery.refetch();
   }
+
+  // Smart button logic - determine what action to show
+  const smartButtonConfig = useMemo(() => {
+    // No campaign yet
+    if (!campaignId) {
+      return {
+        label: "Create Campaign",
+        onClick: onCreateCampaign,
+        disabled: !canTransact || !budgetUnits || !currentMetadataHash || !effectivePublisher,
+      };
+    }
+
+    // Campaign exists - check status
+    switch (campaignOnchainStatus) {
+      case CAMPAIGN_STATUS.CREATED:
+        return {
+          label: "Fund Campaign",
+          onClick: onFundCampaign,
+          disabled: !canTransact,
+        };
+      case CAMPAIGN_STATUS.DEPOSITED:
+        return {
+          label: "Mark Delivered",
+          onClick: onMarkDelivered,
+          disabled: !canTransact,
+        };
+      case CAMPAIGN_STATUS.DELIVERED:
+        return {
+          label: "Release Payment",
+          onClick: onRelease,
+          disabled: !canTransact,
+        };
+      case CAMPAIGN_STATUS.RELEASED:
+        return {
+          label: "✅ Complete",
+          onClick: () => { },
+          disabled: true,
+        };
+      case CAMPAIGN_STATUS.REFUNDED:
+        return {
+          label: "🔄 Refunded",
+          onClick: () => { },
+          disabled: true,
+        };
+      default:
+        return {
+          label: "Create Campaign",
+          onClick: onCreateCampaign,
+          disabled: !canTransact || !budgetUnits || !currentMetadataHash || !effectivePublisher,
+        };
+    }
+  }, [campaignId, campaignOnchainStatus, canTransact, budgetUnits, currentMetadataHash, effectivePublisher]);
 
   return (
     <div className="min-h-screen bg-[#030712] text-white overflow-hidden">
@@ -424,81 +562,83 @@ export default function Home() {
             {/* Left Column: Form + AI Brief */}
             <div className="lg:col-span-2 space-y-6">
               {/* Campaign Details Card */}
-              <SpotlightCard className="p-6">
-                <div className="flex items-center gap-3 mb-6 pb-4 border-b border-white/5">
-                  <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center">
-                    <FileText className="w-5 h-5 text-blue-500" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold">Campaign Details</h3>
-                    <p className="text-sm text-gray-500">Define your requirements. AI will generate a structured brief.</p>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <Textarea
-                      label="Campaign objective"
-                      placeholder="e.g., Drive 1,000 signups for Base App"
-                      value={objective}
-                      onChange={(e) => setObjective(e.target.value)}
-                      disabled={stepMode === "brief"}
-                      hint='Outcome + metric + timeframe (e.g., "Drive 1,000 signups in 14 days").'
-                    />
-                    <Input
-                      label="Audience"
-                      placeholder="e.g., Developers"
-                      value={audience}
-                      onChange={(e) => setAudience(e.target.value)}
-                      disabled={stepMode === "brief"}
-                      hint='Role + stage + context (e.g., "Indie devs pre-launch on Base").'
-                    />
+              <div id="campaign-details">
+                <SpotlightCard className="p-6">
+                  <div className="flex items-center gap-3 mb-6 pb-4 border-b border-white/5">
+                    <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center">
+                      <FileText className="w-5 h-5 text-blue-500" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold">Campaign Details</h3>
+                      <p className="text-sm text-gray-500">Define your requirements. AI will generate a structured brief.</p>
+                    </div>
                   </div>
 
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <Input
-                      label="Primary CTA"
-                      placeholder="e.g., Mint Now"
-                      value={cta}
-                      onChange={(e) => setCta(e.target.value)}
-                      disabled={stepMode === "brief"}
-                      hint='One action (e.g., "Try the demo", "Sign up", "Mint").'
-                    />
-                    <Input
-                      label="Tone"
-                      placeholder="e.g., confident, concise"
-                      value={tone}
-                      onChange={(e) => setTone(e.target.value)}
-                      disabled={stepMode === "brief"}
-                      hint='2–3 adjectives (e.g., "confident, concise, playful").'
-                    />
-                  </div>
+                  <div className="space-y-4">
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <Textarea
+                        label="Campaign objective"
+                        placeholder="e.g., Drive 1,000 signups for Base App"
+                        value={objective}
+                        onChange={(e) => setObjective(e.target.value)}
+                        disabled={stepMode === "brief"}
+                        hint='Outcome + metric + timeframe (e.g., "Drive 1,000 signups in 14 days").'
+                      />
+                      <Input
+                        label="Audience"
+                        placeholder="e.g., Developers"
+                        value={audience}
+                        onChange={(e) => setAudience(e.target.value)}
+                        disabled={stepMode === "brief"}
+                        hint='Role + stage + context (e.g., "Indie devs pre-launch on Base").'
+                      />
+                    </div>
 
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <Input
-                      label="Constraints"
-                      placeholder="e.g., no paid ads"
-                      value={constraints}
-                      onChange={(e) => setConstraints(e.target.value)}
-                      disabled={stepMode === "brief"}
-                      hint='Hard rules (e.g., "no paid influencers", "2-week timeline").'
-                    />
-                    <Input
-                      label="Budget (USDC)"
-                      placeholder="e.g., 500"
-                      inputMode="decimal"
-                      value={budgetUsdc}
-                      onChange={(e) => setBudgetUsdc(e.target.value)}
-                      disabled={stepMode === "brief"}
-                      hint='Number only (e.g., "500" = 500 USDC escrowed onchain).'
-                    />
-                  </div>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <Input
+                        label="Primary CTA"
+                        placeholder="e.g., Mint Now"
+                        value={cta}
+                        onChange={(e) => setCta(e.target.value)}
+                        disabled={stepMode === "brief"}
+                        hint='One action (e.g., "Try the demo", "Sign up", "Mint").'
+                      />
+                      <Input
+                        label="Tone"
+                        placeholder="e.g., confident, concise"
+                        value={tone}
+                        onChange={(e) => setTone(e.target.value)}
+                        disabled={stepMode === "brief"}
+                        hint='2–3 adjectives (e.g., "confident, concise, playful").'
+                      />
+                    </div>
 
-                  <p className="text-xs text-gray-500 pt-2">
-                    Polite AI workflow: generate suggestions → edit → lock to hash → sign the onchain tx.
-                  </p>
-                </div>
-              </SpotlightCard>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <Input
+                        label="Constraints"
+                        placeholder="e.g., no paid ads"
+                        value={constraints}
+                        onChange={(e) => setConstraints(e.target.value)}
+                        disabled={stepMode === "brief"}
+                        hint='Hard rules (e.g., "no paid influencers", "2-week timeline").'
+                      />
+                      <Input
+                        label="Budget (USDC)"
+                        placeholder="e.g., 500"
+                        inputMode="decimal"
+                        value={budgetUsdc}
+                        onChange={(e) => setBudgetUsdc(e.target.value)}
+                        disabled={stepMode === "brief"}
+                        hint='Number only (e.g., "500" = 500 USDC escrowed onchain).'
+                      />
+                    </div>
+
+                    <p className="text-xs text-gray-500 pt-2">
+                      Polite AI workflow: generate suggestions → edit → lock to hash → sign the onchain tx.
+                    </p>
+                  </div>
+                </SpotlightCard>
+              </div>
 
               {/* AI Brief + Deliverables Card */}
               <SpotlightCard className="p-6">
@@ -520,21 +660,6 @@ export default function Home() {
                     >
                       {isGeneratingBrief ? "Generating..." : "Generate Brief"}
                     </ShimmerButton>
-                    <Button
-                      variant="secondary"
-                      disabled={stepMode !== "brief" || isGeneratingBrief}
-                      onClick={onEditInputs}
-                    >
-                      Edit Inputs
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      disabled={stepMode !== "brief" || !currentMetadataHash || isGeneratingBrief}
-                      onClick={onLockToHash}
-                    >
-                      <Lock className="w-4 h-4 mr-1" />
-                      Lock to Hash
-                    </Button>
                   </div>
                 </div>
 
@@ -586,6 +711,25 @@ export default function Home() {
                       disabled={stepMode !== "brief"}
                     />
                   </div>
+                </div>
+
+                {/* Edit/Lock Actions - moved here below Do/Don't */}
+                <div className="flex flex-wrap gap-2 mt-4">
+                  <Button
+                    variant="secondary"
+                    disabled={stepMode !== "brief" || isGeneratingBrief}
+                    onClick={onEditInputs}
+                  >
+                    Edit Inputs
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    disabled={stepMode !== "brief" || !currentMetadataHash || isGeneratingBrief}
+                    onClick={onLockToHash}
+                  >
+                    <Lock className="w-4 h-4 mr-1" />
+                    Lock to Hash
+                  </Button>
                 </div>
 
                 {/* metadataHash Display */}
@@ -806,33 +950,87 @@ export default function Home() {
               </div>
 
               <div className="space-y-4">
-                {/* Action Buttons */}
-                <div className="grid grid-cols-2 gap-3">
+                {/* Progress Stepper */}
+                {campaignId && (
+                  <div className="flex items-center justify-between text-xs text-gray-400 px-2">
+                    {[
+                      { status: CAMPAIGN_STATUS.CREATED, label: "Created" },
+                      { status: CAMPAIGN_STATUS.DEPOSITED, label: "Funded" },
+                      { status: CAMPAIGN_STATUS.DELIVERED, label: "Delivered" },
+                      { status: CAMPAIGN_STATUS.RELEASED, label: "Released" },
+                    ].map((step, idx, arr) => (
+                      <div key={step.status} className="flex items-center">
+                        <div className={`flex items-center gap-1.5 ${campaignOnchainStatus >= step.status
+                          ? "text-emerald-400"
+                          : campaignOnchainStatus === step.status - 1
+                            ? "text-blue-400"
+                            : "text-gray-600"
+                          }`}>
+                          <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-medium ${campaignOnchainStatus >= step.status
+                            ? "bg-emerald-500/20 border border-emerald-500"
+                            : campaignOnchainStatus === step.status - 1
+                              ? "bg-blue-500/20 border border-blue-500 animate-pulse"
+                              : "bg-gray-800 border border-gray-700"
+                            }`}>
+                            {campaignOnchainStatus >= step.status ? "✓" : idx + 1}
+                          </div>
+                          <span className="hidden sm:inline">{step.label}</span>
+                        </div>
+                        {idx < arr.length - 1 && (
+                          <div className={`w-6 sm:w-10 h-0.5 mx-1 ${campaignOnchainStatus > step.status
+                            ? "bg-emerald-500"
+                            : "bg-gray-700"
+                            }`} />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Fund Step: Two Buttons + Bridge Disclaimer */}
+                {campaignId && campaignOnchainStatus === CAMPAIGN_STATUS.CREATED && (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <ActionButton
+                        label="Fund Campaign"
+                        disabled={!canTransact || !lockedMetadataHash || isDirtySinceLock}
+                        busy={isPending}
+                        onClick={smartButtonConfig.onClick}
+                      />
+                      <Button
+                        variant="secondary"
+                        className="w-full"
+                        onClick={() => {
+                          document.getElementById("bridge-section")?.scrollIntoView({ behavior: "smooth" });
+                        }}
+                      >
+                        <ArrowRightLeft className="w-4 h-4 mr-2" />
+                        Bridge to Base
+                      </Button>
+                    </div>
+                    <p className="text-xs text-center text-gray-500">
+                      💡 Bridge available on mainnet only. For testnet, use{" "}
+                      <a
+                        href="https://faucet.circle.com/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-400 underline hover:text-blue-300"
+                      >
+                        Circle Faucet
+                      </a>
+                    </p>
+                  </div>
+                )}
+
+                {/* Other Steps: Single Magic Button */}
+                {(!campaignId || campaignOnchainStatus !== CAMPAIGN_STATUS.CREATED) && (
                   <ActionButton
-                    label="Create campaign"
-                    disabled={!canTransact || !lockedMetadataHash || isDirtySinceLock}
+                    label={smartButtonConfig.label}
+                    disabled={smartButtonConfig.disabled || !lockedMetadataHash || isDirtySinceLock}
                     busy={isPending}
-                    onClick={onCreateCampaign}
+                    onClick={smartButtonConfig.onClick}
                   />
-                  <ActionButton
-                    label="Approve USDC"
-                    disabled={!canTransact}
-                    busy={isPending}
-                    onClick={onApproveUsdc}
-                  />
-                  <ActionButton
-                    label="Deposit USDC"
-                    disabled={!canTransact || !campaignId}
-                    busy={isPending}
-                    onClick={onDeposit}
-                  />
-                  <ActionButton
-                    label="Release"
-                    disabled={!canTransact || !campaignId}
-                    busy={isPending}
-                    onClick={onRelease}
-                  />
-                </div>
+                )}
 
                 {wrongChain && (
                   <Button
@@ -879,7 +1077,7 @@ export default function Home() {
         </section>
 
         {/* LI.FI Bridge Section */}
-        <section className="mx-auto max-w-6xl px-6 pb-8">
+        <section id="bridge-section" className="mx-auto max-w-6xl px-6 pb-8">
           <LiFiBridge />
         </section>
 
@@ -917,7 +1115,7 @@ export default function Home() {
           </div>
         </footer>
       </DotBackground>
-    </div>
+    </div >
   );
 }
 
