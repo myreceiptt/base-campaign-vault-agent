@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useReadContract, useWriteContract, useWaitForTransactionReceipt, useAccount } from "wagmi";
 import { formatUnits, keccak256, toHex } from "viem";
 import {
@@ -9,7 +9,6 @@ import {
     Circle,
     Clock,
     AlertCircle,
-    ArrowRight,
     Wallet,
     Package,
     Send,
@@ -81,16 +80,6 @@ const LIFECYCLE_STEPS = [
     { status: CampaignStatus.RELEASED, label: "Released", icon: Send },
 ];
 
-interface CampaignData {
-    advertiser: `0x${string}`;
-    publisher: `0x${string}`;
-    budget: bigint;
-    deadline: bigint;
-    status: number;
-    metadataHash: `0x${string}`;
-    proofHash: `0x${string}`;
-}
-
 export function CampaignStatusTracker() {
     const [campaignIdInput, setCampaignIdInput] = useState("");
     const [queriedCampaignId, setQueriedCampaignId] = useState<bigint | null>(null);
@@ -159,10 +148,12 @@ export function CampaignStatusTracker() {
         currentStatus === CampaignStatus.DEPOSITED &&
         (isPublisher || isAdvertiser); // Allow either for demo
 
-    // Refetch when delivery is confirmed
-    if (isDeliveryConfirmed && currentStatus === CampaignStatus.DEPOSITED) {
-        refetch();
-    }
+    // Refetch after delivery confirmation to sync updated status
+    useEffect(() => {
+        if (isDeliveryConfirmed && currentStatus === CampaignStatus.DEPOSITED) {
+            void refetch();
+        }
+    }, [isDeliveryConfirmed, currentStatus, refetch]);
 
     async function handleMarkDelivered() {
         if (!vaultAddress || !queriedCampaignId) return;
@@ -180,9 +171,12 @@ export function CampaignStatusTracker() {
     }
 
     function handleSearch() {
-        const id = parseInt(campaignIdInput);
-        if (!isNaN(id) && id > 0) {
-            setQueriedCampaignId(BigInt(id));
+        const trimmed = campaignIdInput.trim();
+        if (/^\d+$/.test(trimmed)) {
+            const id = BigInt(trimmed);
+            if (id > BigInt(0)) {
+                setQueriedCampaignId(id);
+            }
         }
     }
 
@@ -288,7 +282,7 @@ export function CampaignStatusTracker() {
                     {/* Lifecycle Stepper */}
                     <div className="relative">
                         <div className="flex items-center justify-between">
-                            {LIFECYCLE_STEPS.map((step, index) => {
+                            {LIFECYCLE_STEPS.map((step) => {
                                 const state = getStepState(step.status);
                                 const StepIcon = step.icon;
 

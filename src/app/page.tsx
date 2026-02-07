@@ -1,7 +1,7 @@
 "use client";
 
 import { ConnectButton } from "@/components/connect-button";
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import Image from "next/image";
 import {
   decodeEventLog,
@@ -46,7 +46,6 @@ import {
   Sparkles,
   Rocket,
   ShieldCheck,
-  ExternalLink,
   ChevronDown,
   Lock,
   User,
@@ -62,6 +61,15 @@ type BriefResponse = {
 };
 
 type StepMode = "inputs" | "brief";
+
+const CAMPAIGN_STATUS = {
+  NONE: 0,
+  CREATED: 1,
+  DEPOSITED: 2,
+  DELIVERED: 3,
+  RELEASED: 4,
+  REFUNDED: 5,
+} as const;
 
 function analyzeObjective(text: string) {
   const trimmed = text.trim();
@@ -193,6 +201,15 @@ export default function Home() {
     return lockedMetadataHash !== currentMetadataHash;
   }, [lockedMetadataHash, currentMetadataHash]);
 
+  const lockedCanonicalPretty = useMemo(() => {
+    if (!lockedCanonicalJson) return null;
+    try {
+      return JSON.stringify(JSON.parse(lockedCanonicalJson), null, 2);
+    } catch {
+      return lockedCanonicalJson;
+    }
+  }, [lockedCanonicalJson]);
+
   const allowanceEnabled = Boolean(isConnected && address && vaultAddress);
   const allowanceArgs = allowanceEnabled
     ? ([address!, vaultAddress!] as const)
@@ -226,16 +243,6 @@ export default function Home() {
     const statusIndex = 4; // status is at index 4 in tuple
     return Number((campaignStatusQuery.data as readonly unknown[])[statusIndex]);
   }, [campaignStatusQuery.data]);
-
-  // Status enum for display
-  const CAMPAIGN_STATUS = {
-    NONE: 0,
-    CREATED: 1,
-    DEPOSITED: 2,
-    DELIVERED: 3,
-    RELEASED: 4,
-    REFUNDED: 5,
-  } as const;
 
   const { writeContractAsync, data: lastHash, isPending, error } =
     useWriteContract();
@@ -344,7 +351,7 @@ export default function Home() {
     setLockedCanonicalJson(canonicalBriefJson);
   }
 
-  async function onCreateCampaign() {
+  const onCreateCampaign = useCallback(async () => {
     if (!vaultAddress) return;
     if (!lockedMetadataHash) throw new Error("Lock your AI brief to a hash first.");
     if (isDirtySinceLock) throw new Error("Brief changed since lock. Lock again.");
@@ -362,34 +369,18 @@ export default function Home() {
       args: [effectivePublisher ?? zeroAddress, budgetUnits, deadline, lockedMetadataHash],
       chainId: BASE_SEPOLIA_CHAIN_ID,
     });
-  }
-
-  async function onApproveUsdc() {
-    if (!vaultAddress) return;
-    if (!budgetUnits) throw new Error("Invalid budget");
-    await writeContractAsync({
-      address: usdcAddress,
-      abi: erc20Abi,
-      functionName: "approve",
-      args: [vaultAddress, budgetUnits],
-      chainId: BASE_SEPOLIA_CHAIN_ID,
-    });
-  }
-
-  async function onDeposit() {
-    if (!vaultAddress) return;
-    if (!campaignId) throw new Error("Campaign ID required");
-    await writeContractAsync({
-      address: vaultAddress,
-      abi: campaignVaultAbi,
-      functionName: "deposit",
-      args: [BigInt(campaignId)],
-      chainId: BASE_SEPOLIA_CHAIN_ID,
-    });
-  }
+  }, [
+    vaultAddress,
+    lockedMetadataHash,
+    isDirtySinceLock,
+    budgetUnits,
+    deadlineDays,
+    writeContractAsync,
+    effectivePublisher,
+  ]);
 
   // Combined function: approve (if needed) + deposit
-  async function onFundCampaign() {
+  const onFundCampaign = useCallback(async () => {
     if (!vaultAddress) return;
     if (!campaignId) throw new Error("Campaign ID required");
     if (!budgetUnits) throw new Error("Invalid budget");
@@ -420,9 +411,17 @@ export default function Home() {
 
     // Refetch campaign status
     campaignStatusQuery.refetch();
-  }
+  }, [
+    vaultAddress,
+    campaignId,
+    budgetUnits,
+    allowanceQuery.data,
+    writeContractAsync,
+    usdcAddress,
+    campaignStatusQuery,
+  ]);
 
-  async function onMarkDelivered() {
+  const onMarkDelivered = useCallback(async () => {
     if (!vaultAddress) return;
     if (!campaignId) throw new Error("Campaign ID required");
     // Generate a proof hash from timestamp + campaign id
@@ -436,9 +435,9 @@ export default function Home() {
     });
     // Refetch campaign status
     campaignStatusQuery.refetch();
-  }
+  }, [vaultAddress, campaignId, writeContractAsync, campaignStatusQuery]);
 
-  async function onRelease() {
+  const onRelease = useCallback(async () => {
     if (!vaultAddress) return;
     if (!campaignId) throw new Error("Campaign ID required");
     await writeContractAsync({
@@ -450,7 +449,7 @@ export default function Home() {
     });
     // Refetch campaign status
     campaignStatusQuery.refetch();
-  }
+  }, [vaultAddress, campaignId, writeContractAsync, campaignStatusQuery]);
 
   // Smart button logic - determine what action to show
   const smartButtonConfig = useMemo(() => {
@@ -502,7 +501,18 @@ export default function Home() {
           disabled: !canTransact || !budgetUnits || !currentMetadataHash || !effectivePublisher,
         };
     }
-  }, [campaignId, campaignOnchainStatus, canTransact, budgetUnits, currentMetadataHash, effectivePublisher]);
+  }, [
+    campaignId,
+    campaignOnchainStatus,
+    canTransact,
+    budgetUnits,
+    currentMetadataHash,
+    effectivePublisher,
+    onCreateCampaign,
+    onFundCampaign,
+    onMarkDelivered,
+    onRelease,
+  ]);
 
   return (
     <div className="min-h-screen bg-[#030712] text-white overflow-hidden">
@@ -755,7 +765,7 @@ export default function Home() {
                       </button>
                       {showCanonicalJson && (
                         <pre className="mt-2 p-3 rounded-lg bg-black/40 text-xs text-gray-400 overflow-x-auto max-h-40">
-                          {JSON.stringify(JSON.parse(lockedCanonicalJson), null, 2)}
+                          {lockedCanonicalPretty}
                         </pre>
                       )}
                     </div>

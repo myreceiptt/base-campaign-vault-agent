@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useAccount, useChainId, useSwitchChain, useSendTransaction, useWaitForTransactionReceipt } from "wagmi";
 import { parseUnits, formatUnits } from "viem";
 import { ArrowRightLeft, Loader2, CheckCircle, ExternalLink, AlertCircle, Info } from "lucide-react";
@@ -79,11 +79,25 @@ export function LiFiBridge({ onBridgeComplete }: { onBridgeComplete?: () => void
     const [bridgeTxHash, setBridgeTxHash] = useState<`0x${string}` | null>(null);
     const [bridgeStatus, setBridgeStatus] = useState<BridgeStatus | null>(null);
     const [isPollingStatus, setIsPollingStatus] = useState(false);
+    const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     const { sendTransactionAsync, isPending: isSending } = useSendTransaction();
     const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
         hash: bridgeTxHash ?? undefined,
     });
+
+    function clearStatusPolling() {
+        if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current);
+            pollIntervalRef.current = null;
+        }
+    }
+
+    useEffect(() => {
+        return () => {
+            clearStatusPolling();
+        };
+    }, []);
 
     // Get quote from LI.FI API
     async function getQuote() {
@@ -152,11 +166,12 @@ export function LiFiBridge({ onBridgeComplete }: { onBridgeComplete?: () => void
     async function pollBridgeStatus(txHash: string) {
         if (!quote) return;
 
+        clearStatusPolling();
         setIsPollingStatus(true);
         const maxAttempts = 60; // Poll for up to 5 minutes
         let attempts = 0;
 
-        const pollInterval = setInterval(async () => {
+        pollIntervalRef.current = setInterval(async () => {
             attempts++;
 
             try {
@@ -172,7 +187,7 @@ export function LiFiBridge({ onBridgeComplete }: { onBridgeComplete?: () => void
                 setBridgeStatus(status);
 
                 if (status.status === "DONE" || status.status === "FAILED" || attempts >= maxAttempts) {
-                    clearInterval(pollInterval);
+                    clearStatusPolling();
                     setIsPollingStatus(false);
 
                     if (status.status === "DONE" && onBridgeComplete) {
@@ -420,8 +435,10 @@ export function LiFiBridge({ onBridgeComplete }: { onBridgeComplete?: () => void
                     {bridgeStatus?.status === "DONE" && (
                         <Button
                             onClick={() => {
+                                clearStatusPolling();
                                 setBridgeTxHash(null);
                                 setBridgeStatus(null);
+                                setIsPollingStatus(false);
                                 setQuote(null);
                                 setAmount("");
                             }}

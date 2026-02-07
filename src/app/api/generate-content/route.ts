@@ -24,6 +24,64 @@ type GeneratedContent = {
     announcementThread: string[];
 };
 
+const CONTENT_PLATFORMS = ["twitter", "farcaster", "linkedin"] as const;
+
+function normalizeGeneratedContent(raw: unknown): GeneratedContent {
+    if (!raw || typeof raw !== "object") {
+        throw new Error("LLM returned invalid root object");
+    }
+
+    const parsed = raw as Partial<GeneratedContent>;
+
+    if (!Array.isArray(parsed.posts) || !parsed.landingCopy || !Array.isArray(parsed.announcementThread)) {
+        throw new Error("LLM returned invalid shape");
+    }
+
+    const posts: GeneratedContent["posts"] = [];
+    for (const post of parsed.posts) {
+        if (!post || typeof post !== "object") continue;
+        const candidate = post as Partial<GeneratedContent["posts"][number]>;
+        if (
+            !candidate.platform ||
+            !CONTENT_PLATFORMS.includes(candidate.platform) ||
+            typeof candidate.content !== "string"
+        ) {
+            continue;
+        }
+
+        posts.push({
+            platform: candidate.platform,
+            content: candidate.content,
+            variant: typeof candidate.variant === "string" ? candidate.variant : undefined,
+        });
+    }
+
+    const landing = parsed.landingCopy as Partial<GeneratedContent["landingCopy"]>;
+    if (
+        typeof landing.headline !== "string" ||
+        typeof landing.subheadline !== "string" ||
+        !Array.isArray(landing.bulletPoints) ||
+        typeof landing.ctaButton !== "string"
+    ) {
+        throw new Error("LLM returned invalid landing copy");
+    }
+
+    if (posts.length === 0) {
+        throw new Error("LLM returned empty posts");
+    }
+
+    return {
+        posts,
+        landingCopy: {
+            headline: landing.headline,
+            subheadline: landing.subheadline,
+            bulletPoints: landing.bulletPoints.map((point) => String(point)),
+            ctaButton: landing.ctaButton,
+        },
+        announcementThread: parsed.announcementThread.map((item) => String(item)),
+    };
+}
+
 function normalize(input: unknown) {
     return typeof input === "string" ? input.trim() : "";
 }
@@ -161,14 +219,8 @@ Deliverables: ${req.deliverables.join(", ")}`;
                 choices?: Array<{ message?: { content?: string } }>;
             };
             const content = data.choices?.[0]?.message?.content ?? "";
-            const parsed = JSON.parse(content) as Partial<GeneratedContent>;
-
-            // Validate structure
-            if (!Array.isArray(parsed.posts) || !parsed.landingCopy || !Array.isArray(parsed.announcementThread)) {
-                throw new Error("LLM returned invalid shape");
-            }
-
-            return parsed as GeneratedContent;
+            const parsed = JSON.parse(content) as unknown;
+            return normalizeGeneratedContent(parsed);
         },
     };
 }
@@ -199,6 +251,7 @@ export async function POST(req: Request) {
         const out = await llm.generateContent(input);
         return NextResponse.json(out);
     } catch (err) {
+        console.error("generate-content fallback:", err);
         // Fallback to template on error
         const fallback = deterministicTemplate(input);
         return NextResponse.json(fallback, { status: 200 });
