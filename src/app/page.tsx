@@ -14,12 +14,15 @@ import {
 import {
   useAccount,
   useChainId,
+  useEnsAddress,
+  useEnsAvatar,
+  useEnsName,
   useReadContract,
   useSwitchChain,
   useWaitForTransactionReceipt,
   useWriteContract,
 } from "wagmi";
-import { baseSepolia } from "wagmi/chains";
+import { baseSepolia, mainnet } from "wagmi/chains";
 import { campaignVaultAbi } from "@/lib/abi/campaignVault";
 import { erc20Abi } from "@/lib/abi/erc20";
 import { BASE_SEPOLIA_CHAIN_ID, getExplorerTxUrl } from "@/lib/onchain";
@@ -35,6 +38,7 @@ import { GradientText } from "@/components/ui/TextEffects";
 import { Input, Textarea } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { ShimmerButton } from "@/components/ui/MovingBorder";
+import { LiFiBridge } from "@/components/lifi-bridge";
 import {
   FileText,
   Sparkles,
@@ -43,6 +47,7 @@ import {
   ExternalLink,
   ChevronDown,
   Lock,
+  User,
 } from "lucide-react";
 
 type BriefResponse = {
@@ -105,6 +110,43 @@ export default function Home() {
   const vaultAddress = process.env.NEXT_PUBLIC_VAULT as
     | `0x${string}`
     | undefined;
+
+  // ENS Resolution for Publisher (resolve ENS name → address)
+  // Check if publisher input looks like an ENS name
+  const isEnsName = publisher.includes(".") && !publisher.startsWith("0x");
+  const { data: resolvedPublisherAddress, isLoading: isResolvingEns } = useEnsAddress({
+    name: isEnsName ? publisher : undefined,
+    chainId: mainnet.id, // ENS resolution happens on mainnet
+  });
+
+  // Get the effective publisher address (resolved or raw input)
+  const effectivePublisher = useMemo(() => {
+    if (isEnsName && resolvedPublisherAddress) {
+      return resolvedPublisherAddress;
+    }
+    if (publisher && isAddress(publisher)) {
+      return publisher as `0x${string}`;
+    }
+    return null;
+  }, [isEnsName, resolvedPublisherAddress, publisher]);
+
+  // ENS Name lookup for advertiser (connected wallet)
+  const { data: advertiserEnsName } = useEnsName({
+    address: address,
+    chainId: mainnet.id,
+  });
+
+  // ENS Avatar for publisher (if resolved)
+  const { data: publisherEnsAvatar } = useEnsAvatar({
+    name: isEnsName ? publisher : undefined,
+    chainId: mainnet.id,
+  });
+
+  // ENS Avatar for advertiser
+  const { data: advertiserEnsAvatar } = useEnsAvatar({
+    name: advertiserEnsName ?? undefined,
+    chainId: mainnet.id,
+  });
 
   const objectiveQuality = useMemo(() => analyzeObjective(objective), [objective]);
 
@@ -281,7 +323,7 @@ export default function Home() {
       address: vaultAddress,
       abi: campaignVaultAbi,
       functionName: "createCampaign",
-      args: [publisher && isAddress(publisher) ? publisher : zeroAddress, budgetUnits, deadline, lockedMetadataHash],
+      args: [effectivePublisher ?? zeroAddress, budgetUnits, deadline, lockedMetadataHash],
       chainId: BASE_SEPOLIA_CHAIN_ID,
     });
   }
@@ -591,6 +633,28 @@ export default function Home() {
                         Campaign Summary
                       </h4>
                       <div className="space-y-4 text-sm">
+                        {/* Advertiser ENS Display */}
+                        {isConnected && (
+                          <div className="flex items-center gap-3 p-3 rounded-lg bg-white/5 border border-white/10">
+                            {advertiserEnsAvatar ? (
+                              <img
+                                src={advertiserEnsAvatar}
+                                alt="Your ENS Avatar"
+                                className="w-8 h-8 rounded-full"
+                              />
+                            ) : (
+                              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#0052FF] to-[#1CD8D2] flex items-center justify-center">
+                                <User className="w-4 h-4 text-white" />
+                              </div>
+                            )}
+                            <div>
+                              <p className="text-xs text-gray-500">Advertiser</p>
+                              <p className="font-medium text-emerald-400">
+                                {advertiserEnsName ?? `${address?.slice(0, 6)}...${address?.slice(-4)}`}
+                              </p>
+                            </div>
+                          </div>
+                        )}
                         {objective && (
                           <div>
                             <p className="text-gray-500 mb-1">Objective</p>
@@ -658,13 +722,56 @@ export default function Home() {
                 </div>
 
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <Input
-                    label="Publisher address"
-                    placeholder="0x... or ens.eth"
-                    value={publisher}
-                    onChange={(e) => setPublisher(e.target.value)}
-                    className="font-mono text-xs"
-                  />
+                  <div>
+                    <Input
+                      label="Publisher address"
+                      placeholder="vitalik.eth or 0x..."
+                      value={publisher}
+                      onChange={(e) => setPublisher(e.target.value)}
+                      className="font-mono text-xs"
+                    />
+                    {/* ENS Resolution Status */}
+                    {publisher && (
+                      <div className="mt-2 text-xs">
+                        {isResolvingEns && (
+                          <div className="flex items-center gap-2 text-amber-400">
+                            <span className="animate-pulse">●</span>
+                            Resolving ENS...
+                          </div>
+                        )}
+                        {isEnsName && resolvedPublisherAddress && (
+                          <div className="flex items-center gap-2 text-emerald-400">
+                            {publisherEnsAvatar && (
+                              <img
+                                src={publisherEnsAvatar}
+                                alt="ENS Avatar"
+                                className="w-5 h-5 rounded-full"
+                              />
+                            )}
+                            <span>✓ {publisher}</span>
+                            <span className="text-gray-500 font-mono">
+                              ({resolvedPublisherAddress.slice(0, 6)}...{resolvedPublisherAddress.slice(-4)})
+                            </span>
+                          </div>
+                        )}
+                        {isEnsName && !isResolvingEns && !resolvedPublisherAddress && (
+                          <div className="text-red-400">
+                            ✗ ENS name not found
+                          </div>
+                        )}
+                        {!isEnsName && isAddress(publisher) && (
+                          <div className="text-emerald-400">
+                            ✓ Valid address
+                          </div>
+                        )}
+                        {!isEnsName && publisher && !isAddress(publisher) && (
+                          <div className="text-red-400">
+                            ✗ Invalid address
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                   <Input
                     label="Deadline (days)"
                     inputMode="numeric"
@@ -767,6 +874,11 @@ export default function Home() {
               </div>
             </div>
           </SpotlightCard>
+        </section>
+
+        {/* LI.FI Bridge Section */}
+        <section className="mx-auto max-w-6xl px-6 pb-8">
+          <LiFiBridge />
         </section>
 
         {/* Footer */}
