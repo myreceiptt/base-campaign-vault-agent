@@ -130,9 +130,22 @@ export function CampaignStatusTracker() {
         error: markDeliveredError,
     } = useWriteContract();
 
+    // Write contract for releasing funds (advertiser action)
+    const {
+        writeContract: releaseFunds,
+        data: releaseHash,
+        isPending: isReleasing,
+        error: releaseError,
+    } = useWriteContract();
+
     // Wait for mark delivered transaction
     const { isLoading: isConfirmingDelivery, isSuccess: isDeliveryConfirmed } = useWaitForTransactionReceipt({
         hash: markDeliveredHash,
+    });
+
+    // Wait for release transaction
+    const { isLoading: isConfirmingRelease, isSuccess: isReleaseConfirmed } = useWaitForTransactionReceipt({
+        hash: releaseHash,
     });
 
     // Parse the campaign data - wagmi returns struct as tuple array
@@ -213,12 +226,28 @@ export function CampaignStatusTracker() {
         campaign.deliveredMilestones < campaign.milestoneCount &&
         isPublisher;
 
+    // Only advertiser can release funds (matches contract authorization).
+    const isAdvertiser = address && campaign && campaign.advertiser.toLowerCase() === address.toLowerCase();
+    const canRelease =
+        campaign &&
+        isAdvertiser &&
+        (campaign.milestoneCount > 1
+            ? campaign.deliveredMilestones > campaign.releasedMilestones
+            : currentStatus === CampaignStatus.DELIVERED);
+
     // Refetch after delivery confirmation to sync updated status
     useEffect(() => {
         if (isDeliveryConfirmed && currentStatus === CampaignStatus.DEPOSITED) {
             void refetch();
         }
     }, [isDeliveryConfirmed, currentStatus, refetch]);
+
+    // Refetch after release confirmation to sync updated status
+    useEffect(() => {
+        if (isReleaseConfirmed) {
+            void refetch();
+        }
+    }, [isReleaseConfirmed, refetch]);
 
     async function handleMarkDelivered() {
         if (!vaultAddress || !queriedCampaignId || !campaign) return;
@@ -266,6 +295,54 @@ export function CampaignStatusTracker() {
                         abi: campaignVaultAbi,
                         functionName: "markDelivered",
                         args: [queriedCampaignId, proofHash],
+                        chainId: BASE_SEPOLIA_CHAIN_ID,
+                    }
+        );
+    }
+
+    async function handleRelease() {
+        if (!vaultAddress || !queriedCampaignId || !campaign) return;
+
+        const senderEnsFromHook = typeof advertiserEnsName === "string" ? advertiserEnsName.trim() : "";
+        let senderEnsName = senderEnsFromHook;
+        if (!senderEnsName && ensPublicClient && address) {
+            try {
+                senderEnsName = (await ensPublicClient.getEnsName({ address })) ?? "";
+            } catch {
+                senderEnsName = "";
+            }
+        }
+
+        releaseFunds(
+            campaign.milestoneCount > 1
+                ? senderEnsName
+                    ? {
+                        address: vaultAddress,
+                        abi: campaignVaultAbi,
+                        functionName: "releaseMilestoneWithEns",
+                        args: [queriedCampaignId, senderEnsName],
+                        chainId: BASE_SEPOLIA_CHAIN_ID,
+                    }
+                    : {
+                        address: vaultAddress,
+                        abi: campaignVaultAbi,
+                        functionName: "releaseMilestone",
+                        args: [queriedCampaignId],
+                        chainId: BASE_SEPOLIA_CHAIN_ID,
+                    }
+                : senderEnsName
+                    ? {
+                        address: vaultAddress,
+                        abi: campaignVaultAbi,
+                        functionName: "releaseWithEns",
+                        args: [queriedCampaignId, senderEnsName],
+                        chainId: BASE_SEPOLIA_CHAIN_ID,
+                    }
+                    : {
+                        address: vaultAddress,
+                        abi: campaignVaultAbi,
+                        functionName: "release",
+                        args: [queriedCampaignId],
                         chainId: BASE_SEPOLIA_CHAIN_ID,
                     }
         );
@@ -507,6 +584,65 @@ export function CampaignStatusTracker() {
                                     <ExternalLink className="w-4 h-4" />
                                     <a
                                         href={getExplorerTxUrl(markDeliveredHash)}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="hover:underline"
+                                    >
+                                        View transaction
+                                    </a>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Release Button (for Advertiser once milestones are delivered) */}
+                    {canRelease && (
+                        <div className="p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="font-medium text-emerald-400">Ready to release funds?</p>
+                                    <p className="text-sm text-gray-400 mt-1">
+                                        {campaign.milestoneCount > 1
+                                            ? `Release milestone ${campaign.releasedMilestones + 1}/${campaign.milestoneCount} to the publisher`
+                                            : "Release the campaign budget to the publisher"}
+                                    </p>
+                                </div>
+                                <Button
+                                    onClick={handleRelease}
+                                    disabled={isReleasing || isConfirmingRelease}
+                                    className="bg-emerald-600 hover:bg-emerald-700"
+                                >
+                                    {isReleasing ? (
+                                        <>
+                                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                            Confirm in Wallet...
+                                        </>
+                                    ) : isConfirmingRelease ? (
+                                        <>
+                                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                            Confirming...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Send className="w-4 h-4 mr-2" />
+                                            {campaign.milestoneCount > 1
+                                                ? `Release Milestone ${campaign.releasedMilestones + 1}`
+                                                : "Release"}
+                                        </>
+                                    )}
+                                </Button>
+                            </div>
+                            {releaseError && (
+                                <div className="flex items-center gap-2 mt-3 text-red-400 text-sm">
+                                    <AlertCircle className="w-4 h-4" />
+                                    {releaseError.message.split("\n")[0]}
+                                </div>
+                            )}
+                            {releaseHash && (
+                                <div className="flex items-center gap-2 mt-3 text-emerald-400 text-sm">
+                                    <ExternalLink className="w-4 h-4" />
+                                    <a
+                                        href={getExplorerTxUrl(releaseHash)}
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         className="hover:underline"
