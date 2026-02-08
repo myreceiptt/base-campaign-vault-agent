@@ -67,6 +67,19 @@ type LlmClient = {
   generateBrief: (req: BriefRequest) => Promise<BriefResponse>;
 };
 
+function parseJsonObjectContent(content: string): unknown {
+  try {
+    return JSON.parse(content);
+  } catch {
+    const start = content.indexOf("{");
+    const end = content.lastIndexOf("}");
+    if (start === -1 || end === -1 || end <= start) {
+      throw new Error("LLM did not return valid JSON");
+    }
+    return JSON.parse(content.slice(start, end + 1));
+  }
+}
+
 function createLlmClient(): LlmClient | null {
   const apiKey = process.env.LLM_API_KEY;
   if (!apiKey) return null;
@@ -74,6 +87,7 @@ function createLlmClient(): LlmClient | null {
   const provider = (process.env.LLM_PROVIDER ?? "openai-compatible").toLowerCase();
   const apiUrl = process.env.LLM_API_URL ?? "https://api.openai.com/v1/chat/completions";
   const model = process.env.LLM_MODEL ?? "gpt-4o-mini";
+  const timeoutMs = Number(process.env.LLM_TIMEOUT_MS ?? "20000");
 
   if (provider !== "openai-compatible") {
     return null;
@@ -98,14 +112,27 @@ function createLlmClient(): LlmClient | null {
         ],
       };
 
-      const res = await fetch(apiUrl, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify(payload),
-      });
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
+      let res: Response;
+      try {
+        res = await fetch(apiUrl, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        });
+      } catch (err) {
+        if ((err as Error).name === "AbortError") {
+          throw new Error(`LLM request timed out after ${timeoutMs}ms`);
+        }
+        throw err;
+      } finally {
+        clearTimeout(timeout);
+      }
 
       if (!res.ok) {
         const text = await res.text().catch(() => "");
@@ -116,7 +143,7 @@ function createLlmClient(): LlmClient | null {
         choices?: Array<{ message?: { content?: string } }>;
       };
       const content = data.choices?.[0]?.message?.content ?? "";
-      const parsed = JSON.parse(content) as Partial<BriefResponse>;
+      const parsed = parseJsonObjectContent(content) as Partial<BriefResponse>;
 
       if (
         typeof parsed.brief !== "string" ||
@@ -127,11 +154,19 @@ function createLlmClient(): LlmClient | null {
         throw new Error("LLM returned invalid shape");
       }
 
+      const deliverables = parsed.deliverables.map((x) => String(x).trim()).filter(Boolean);
+      const dos = parsed.do.map((x) => String(x).trim()).filter(Boolean);
+      const donts = parsed.dont.map((x) => String(x).trim()).filter(Boolean);
+      const brief = parsed.brief.trim();
+      if (!brief || deliverables.length === 0 || dos.length === 0 || donts.length === 0) {
+        throw new Error("LLM returned empty required fields");
+      }
+
       return {
-        brief: parsed.brief,
-        deliverables: parsed.deliverables.map((x) => String(x)),
-        do: parsed.do.map((x) => String(x)),
-        dont: parsed.dont.map((x) => String(x)),
+        brief,
+        deliverables,
+        do: dos,
+        dont: donts,
         budgetNotes: parsed.budgetNotes ? String(parsed.budgetNotes) : undefined,
       };
     },
@@ -174,4 +209,3 @@ export async function POST(req: Request) {
     );
   }
 }
-

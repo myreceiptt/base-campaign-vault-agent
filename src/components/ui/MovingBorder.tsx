@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
@@ -126,6 +126,10 @@ export function ShimmerButton({
     children,
     ...props
 }: ShimmerButtonProps) {
+    // Keep API-compatible props intentionally consumed for future style controls.
+    void shimmerSize;
+    void shimmerDuration;
+
     return (
         <button
             className={cn(

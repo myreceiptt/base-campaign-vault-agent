@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 
@@ -26,31 +26,33 @@ export function Typewriter({
     const [isDeleting, setIsDeleting] = useState(false);
 
     useEffect(() => {
-        const word = words[currentWordIndex];
+        if (words.length === 0) return;
 
-        if (!isDeleting) {
-            if (currentText.length < word.length) {
-                const timeout = setTimeout(() => {
-                    setCurrentText(word.slice(0, currentText.length + 1));
-                }, typingSpeed);
-                return () => clearTimeout(timeout);
-            } else {
-                const timeout = setTimeout(() => {
-                    setIsDeleting(true);
-                }, delayBetweenWords);
-                return () => clearTimeout(timeout);
-            }
+        const word = words[currentWordIndex] ?? "";
+        let timeout: ReturnType<typeof setTimeout> | undefined;
+
+        if (!isDeleting && currentText.length < word.length) {
+            timeout = setTimeout(() => {
+                setCurrentText(word.slice(0, currentText.length + 1));
+            }, typingSpeed);
+        } else if (!isDeleting) {
+            timeout = setTimeout(() => {
+                setIsDeleting(true);
+            }, delayBetweenWords);
+        } else if (currentText.length > 0) {
+            timeout = setTimeout(() => {
+                setCurrentText(currentText.slice(0, -1));
+            }, deletingSpeed);
         } else {
-            if (currentText.length > 0) {
-                const timeout = setTimeout(() => {
-                    setCurrentText(currentText.slice(0, -1));
-                }, deletingSpeed);
-                return () => clearTimeout(timeout);
-            } else {
+            timeout = setTimeout(() => {
                 setIsDeleting(false);
                 setCurrentWordIndex((prev) => (prev + 1) % words.length);
-            }
+            }, deletingSpeed);
         }
+
+        return () => {
+            if (timeout) clearTimeout(timeout);
+        };
     }, [currentText, isDeleting, currentWordIndex, words, typingSpeed, deletingSpeed, delayBetweenWords]);
 
     return (
@@ -80,6 +82,8 @@ export function FlipWords({
     const [currentIndex, setCurrentIndex] = useState(0);
 
     useEffect(() => {
+        if (words.length === 0) return;
+
         const interval = setInterval(() => {
             setCurrentIndex((prev) => (prev + 1) % words.length);
         }, duration);
@@ -96,7 +100,7 @@ export function FlipWords({
                 transition={{ duration: 0.3 }}
                 className={cn("inline-block", className)}
             >
-                {words[currentIndex]}
+                {words[currentIndex] ?? ""}
             </motion.span>
         </AnimatePresence>
     );
@@ -146,7 +150,7 @@ export function TextGenerateEffect({
     duration = 0.5,
 }: TextGenerateEffectProps) {
     const [displayedWords, setDisplayedWords] = useState<string[]>([]);
-    const wordsArray = words.split(" ");
+    const wordsArray = useMemo(() => words.split(" "), [words]);
 
     useEffect(() => {
         let index = 0;
@@ -159,7 +163,7 @@ export function TextGenerateEffect({
             }
         }, duration * 100);
         return () => clearInterval(interval);
-    }, [words]);
+    }, [duration, wordsArray]);
 
     return (
         <div className={cn("font-bold", className)}>
