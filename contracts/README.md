@@ -2,6 +2,13 @@
 
 Hardhat workspace for `CampaignVault` on Base Sepolia (chainId `84532`).
 
+## Milestone Escrow Features
+
+- `createCampaignWithMilestones(..., milestoneCount)`
+- `markMilestoneDelivered(campaignId, proofHash, milestoneIndex)`
+- `releaseMilestone(campaignId)` for staged payout
+- `getMilestoneState(campaignId)` for milestone/release counters
+
 ## Setup
 
 ```bash
@@ -22,6 +29,8 @@ npm run build
 npm test
 ```
 
+Compiler target in this workspace is Solidity `0.8.26` (contract pragma remains `^0.8.24`).
+
 ## Deploy (Base Sepolia)
 
 ```bash
@@ -39,8 +48,3 @@ After deploy, set the frontend env var `NEXT_PUBLIC_VAULT` to the deployed addre
 ```bash
 npm run verify:vault
 ```
-
-## Deployment record
-
-- Base Sepolia: `0x316c82205681B098d6a6b6Ac1fa221074F62E2E3`
-- Deploy tx: `0x531a4e70a4475d3d48bedba8c0dfbcf535fa3ae6c82315c8034b0dac40bed61a`
