@@ -195,6 +195,16 @@ export function CampaignStatusTracker() {
     // Check if campaign was refunded (special branch)
     const wasRefunded = currentStatus === CampaignStatus.REFUNDED;
 
+    // The stepper is meant to communicate the lifecycle progress and "what happens next".
+    // Onchain `status` stays `DEPOSITED` during milestone-by-milestone delivery, so we shift
+    // the highlighted step to match the next action the user can take in the UI.
+    const stepperStatus = (() => {
+        if (wasRefunded) return CampaignStatus.REFUNDED;
+        if (currentStatus === CampaignStatus.DEPOSITED) return CampaignStatus.DELIVERED;
+        if (currentStatus === CampaignStatus.DELIVERED) return CampaignStatus.RELEASED;
+        return currentStatus;
+    })();
+
     // Only publisher can mark a campaign as delivered (matches contract authorization).
     const isPublisher = address && campaign && campaign.publisher.toLowerCase() === address.toLowerCase();
     const canMarkDelivered =
@@ -301,8 +311,8 @@ export function CampaignStatusTracker() {
             return "pending";
         }
 
-        if (stepStatus < currentStatus) return "completed";
-        if (stepStatus === currentStatus) return "current";
+        if (stepStatus < stepperStatus) return "completed";
+        if (stepStatus === stepperStatus) return "current";
         return "pending";
     }
 
@@ -429,11 +439,9 @@ export function CampaignStatusTracker() {
                                 style={{
                                     width: wasRefunded
                                         ? "33%" // Stop at Deposited for refunded
-                                        : currentStatus === CampaignStatus.CREATED
+                                        : stepperStatus === CampaignStatus.CREATED
                                             ? "0%"
-                                            : currentStatus === CampaignStatus.DEPOSITED
-                                                ? "33%"
-                                                : currentStatus === CampaignStatus.DELIVERED
+                                            : stepperStatus === CampaignStatus.DELIVERED
                                                     ? "66%"
                                                     : "100%",
                                 }}
