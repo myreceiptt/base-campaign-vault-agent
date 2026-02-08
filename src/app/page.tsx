@@ -91,6 +91,7 @@ export default function Home() {
   const chainId = useChainId();
   const { switchChain, isPending: isSwitching } = useSwitchChain();
   const publicClient = usePublicClient({ chainId: BASE_SEPOLIA_CHAIN_ID });
+  const ensPublicClient = usePublicClient({ chainId: mainnet.id });
 
   // Form state
   const [objective, setObjective] = useState("");
@@ -148,6 +149,17 @@ export default function Home() {
     address: address,
     chainId: mainnet.id, // ENS resolution on mainnet (where ENS names are registered)
   });
+
+  const resolveSenderEnsName = useCallback(async () => {
+    const fromHook = typeof advertiserEnsName === "string" ? advertiserEnsName.trim() : "";
+    if (fromHook) return fromHook;
+    if (!ensPublicClient || !address) return "";
+    try {
+      return (await ensPublicClient.getEnsName({ address })) ?? "";
+    } catch {
+      return "";
+    }
+  }, [advertiserEnsName, ensPublicClient, address]);
 
   // ENS Avatar for publisher (if resolved)
   const { data: publisherEnsAvatar } = useEnsAvatar({
@@ -423,6 +435,7 @@ export default function Home() {
     if (isDirtySinceLock) throw new Error("Brief changed since lock. Lock again.");
     if (!budgetUnits) throw new Error("Invalid budget");
 
+    const ensName = await resolveSenderEnsName();
     const days = Number(deadlineDays);
     if (!Number.isFinite(days) || days <= 0) throw new Error("Invalid deadline days");
     const deadline =
@@ -432,8 +445,25 @@ export default function Home() {
       await writeContractAsync({
         address: vaultAddress,
         abi: campaignVaultAbi,
-        functionName: "createCampaignWithMilestones",
-        args: [effectivePublisher ?? zeroAddress, budgetUnits, deadline, lockedMetadataHash, derivedMilestoneCount],
+        functionName: ensName
+          ? "createCampaignWithMilestonesAndEns"
+          : "createCampaignWithMilestones",
+        args: ensName
+          ? [
+            effectivePublisher ?? zeroAddress,
+            budgetUnits,
+            deadline,
+            lockedMetadataHash,
+            derivedMilestoneCount,
+            ensName,
+          ]
+          : [
+            effectivePublisher ?? zeroAddress,
+            budgetUnits,
+            deadline,
+            lockedMetadataHash,
+            derivedMilestoneCount,
+          ],
         chainId: BASE_SEPOLIA_CHAIN_ID,
       });
       return;
@@ -442,8 +472,10 @@ export default function Home() {
     await writeContractAsync({
       address: vaultAddress,
       abi: campaignVaultAbi,
-      functionName: "createCampaign",
-      args: [effectivePublisher ?? zeroAddress, budgetUnits, deadline, lockedMetadataHash],
+      functionName: ensName ? "createCampaignWithEns" : "createCampaign",
+      args: ensName
+        ? [effectivePublisher ?? zeroAddress, budgetUnits, deadline, lockedMetadataHash, ensName]
+        : [effectivePublisher ?? zeroAddress, budgetUnits, deadline, lockedMetadataHash],
       chainId: BASE_SEPOLIA_CHAIN_ID,
     });
   }, [
@@ -455,6 +487,7 @@ export default function Home() {
     derivedMilestoneCount,
     writeContractAsync,
     effectivePublisher,
+    resolveSenderEnsName,
   ]);
 
   // Combined function: approve (if needed) + deposit
@@ -464,6 +497,7 @@ export default function Home() {
     if (!budgetUnits) throw new Error("Invalid budget");
     if (!publicClient) throw new Error("RPC client not ready");
 
+    const ensName = await resolveSenderEnsName();
     // Check if we need to approve first
     if (allowance < budgetUnits) {
       // First approve
@@ -479,13 +513,23 @@ export default function Home() {
     }
 
     // Then deposit
-    const depositHash = await writeContractAsync({
-      address: vaultAddress,
-      abi: campaignVaultAbi,
-      functionName: "deposit",
-      args: [campaignIdBigInt],
-      chainId: BASE_SEPOLIA_CHAIN_ID,
-    });
+    const depositHash = await writeContractAsync(
+      ensName
+        ? {
+          address: vaultAddress,
+          abi: campaignVaultAbi,
+          functionName: "depositWithEns",
+          args: [campaignIdBigInt, ensName],
+          chainId: BASE_SEPOLIA_CHAIN_ID,
+        }
+        : {
+          address: vaultAddress,
+          abi: campaignVaultAbi,
+          functionName: "deposit",
+          args: [campaignIdBigInt],
+          chainId: BASE_SEPOLIA_CHAIN_ID,
+        },
+    );
     await publicClient.waitForTransactionReceipt({ hash: depositHash });
 
     // Refetch campaign status
@@ -500,6 +544,7 @@ export default function Home() {
     writeContractAsync,
     usdcAddress,
     refetchCampaignStatus,
+    resolveSenderEnsName,
   ]);
 
   const onMarkDelivered = useCallback(async () => {
@@ -509,22 +554,39 @@ export default function Home() {
     // Generate a proof hash from timestamp + campaign id
     const proofHash = keccak256(toHex(`proof-${campaignIdBigInt.toString()}-${Date.now()}`));
     const nextMilestoneIndex = deliveredMilestones + 1;
+    const ensName = await resolveSenderEnsName();
     const markDeliveredHash = await writeContractAsync(
       campaignMilestoneCount > 1
-        ? {
-          address: vaultAddress,
-          abi: campaignVaultAbi,
-          functionName: "markMilestoneDelivered",
-          args: [campaignIdBigInt, proofHash, nextMilestoneIndex],
-          chainId: BASE_SEPOLIA_CHAIN_ID,
-        }
-        : {
-          address: vaultAddress,
-          abi: campaignVaultAbi,
-          functionName: "markDelivered",
-          args: [campaignIdBigInt, proofHash],
-          chainId: BASE_SEPOLIA_CHAIN_ID,
-        },
+        ? ensName
+          ? {
+            address: vaultAddress,
+            abi: campaignVaultAbi,
+            functionName: "markMilestoneDeliveredWithEns",
+            args: [campaignIdBigInt, proofHash, nextMilestoneIndex, ensName],
+            chainId: BASE_SEPOLIA_CHAIN_ID,
+          }
+          : {
+            address: vaultAddress,
+            abi: campaignVaultAbi,
+            functionName: "markMilestoneDelivered",
+            args: [campaignIdBigInt, proofHash, nextMilestoneIndex],
+            chainId: BASE_SEPOLIA_CHAIN_ID,
+          }
+        : ensName
+          ? {
+            address: vaultAddress,
+            abi: campaignVaultAbi,
+            functionName: "markDeliveredWithEns",
+            args: [campaignIdBigInt, proofHash, ensName],
+            chainId: BASE_SEPOLIA_CHAIN_ID,
+          }
+          : {
+            address: vaultAddress,
+            abi: campaignVaultAbi,
+            functionName: "markDelivered",
+            args: [campaignIdBigInt, proofHash],
+            chainId: BASE_SEPOLIA_CHAIN_ID,
+          },
     );
     await publicClient.waitForTransactionReceipt({ hash: markDeliveredHash });
     // Refetch campaign status
@@ -537,6 +599,7 @@ export default function Home() {
     refetchCampaignStatus,
     campaignMilestoneCount,
     deliveredMilestones,
+    resolveSenderEnsName,
   ]);
 
   const onRelease = useCallback(async () => {
@@ -545,22 +608,39 @@ export default function Home() {
     if (!publicClient) throw new Error("RPC client not ready");
     const hasUnreleasedMilestones =
       campaignMilestoneCount > 1 && releasedMilestones < campaignMilestoneCount;
+    const ensName = await resolveSenderEnsName();
     const releaseHash = await writeContractAsync(
       hasUnreleasedMilestones
-        ? {
-          address: vaultAddress,
-          abi: campaignVaultAbi,
-          functionName: "releaseMilestone",
-          args: [campaignIdBigInt],
-          chainId: BASE_SEPOLIA_CHAIN_ID,
-        }
-        : {
-          address: vaultAddress,
-          abi: campaignVaultAbi,
-          functionName: "release",
-          args: [campaignIdBigInt],
-          chainId: BASE_SEPOLIA_CHAIN_ID,
-        },
+        ? ensName
+          ? {
+            address: vaultAddress,
+            abi: campaignVaultAbi,
+            functionName: "releaseMilestoneWithEns",
+            args: [campaignIdBigInt, ensName],
+            chainId: BASE_SEPOLIA_CHAIN_ID,
+          }
+          : {
+            address: vaultAddress,
+            abi: campaignVaultAbi,
+            functionName: "releaseMilestone",
+            args: [campaignIdBigInt],
+            chainId: BASE_SEPOLIA_CHAIN_ID,
+          }
+        : ensName
+          ? {
+            address: vaultAddress,
+            abi: campaignVaultAbi,
+            functionName: "releaseWithEns",
+            args: [campaignIdBigInt, ensName],
+            chainId: BASE_SEPOLIA_CHAIN_ID,
+          }
+          : {
+            address: vaultAddress,
+            abi: campaignVaultAbi,
+            functionName: "release",
+            args: [campaignIdBigInt],
+            chainId: BASE_SEPOLIA_CHAIN_ID,
+          },
     );
     await publicClient.waitForTransactionReceipt({ hash: releaseHash });
     // Refetch campaign status
@@ -573,6 +653,7 @@ export default function Home() {
     refetchCampaignStatus,
     campaignMilestoneCount,
     releasedMilestones,
+    resolveSenderEnsName,
   ]);
 
   // Smart button logic - determine what action to show

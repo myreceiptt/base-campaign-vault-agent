@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
-import { useReadContract, useWriteContract, useWaitForTransactionReceipt, useAccount, useEnsName, useEnsAvatar } from "wagmi";
+import { useReadContract, useWriteContract, useWaitForTransactionReceipt, useAccount, useEnsName, useEnsAvatar, usePublicClient } from "wagmi";
 import { mainnet } from "wagmi/chains";
 import { formatUnits, keccak256, toHex, zeroAddress } from "viem";
 import {
@@ -103,6 +103,7 @@ export function CampaignStatusTracker() {
 
     const { address } = useAccount();
     const vaultAddress = process.env.NEXT_PUBLIC_VAULT as `0x${string}` | undefined;
+    const ensPublicClient = usePublicClient({ chainId: mainnet.id });
 
     // Read campaign data from contract
     const {
@@ -215,23 +216,48 @@ export function CampaignStatusTracker() {
         // Generate a proof hash from timestamp + campaign id
         const proofHash = keccak256(toHex(`proof-${queriedCampaignId}-${Date.now()}`));
         const nextMilestone = campaign.deliveredMilestones + 1;
+        const senderEnsFromHook = typeof publisherEnsName === "string" ? publisherEnsName.trim() : "";
+        let senderEnsName = senderEnsFromHook;
+        if (!senderEnsName && ensPublicClient && address) {
+            try {
+                senderEnsName = (await ensPublicClient.getEnsName({ address })) ?? "";
+            } catch {
+                senderEnsName = "";
+            }
+        }
 
         markDelivered(
             campaign.milestoneCount > 1
-                ? {
-                    address: vaultAddress,
-                    abi: campaignVaultAbi,
-                    functionName: "markMilestoneDelivered",
-                    args: [queriedCampaignId, proofHash, nextMilestone],
-                    chainId: BASE_SEPOLIA_CHAIN_ID,
-                }
-                : {
-                    address: vaultAddress,
-                    abi: campaignVaultAbi,
-                    functionName: "markDelivered",
-                    args: [queriedCampaignId, proofHash],
-                    chainId: BASE_SEPOLIA_CHAIN_ID,
-                }
+                ? senderEnsName
+                    ? {
+                        address: vaultAddress,
+                        abi: campaignVaultAbi,
+                        functionName: "markMilestoneDeliveredWithEns",
+                        args: [queriedCampaignId, proofHash, nextMilestone, senderEnsName],
+                        chainId: BASE_SEPOLIA_CHAIN_ID,
+                    }
+                    : {
+                        address: vaultAddress,
+                        abi: campaignVaultAbi,
+                        functionName: "markMilestoneDelivered",
+                        args: [queriedCampaignId, proofHash, nextMilestone],
+                        chainId: BASE_SEPOLIA_CHAIN_ID,
+                    }
+                : senderEnsName
+                    ? {
+                        address: vaultAddress,
+                        abi: campaignVaultAbi,
+                        functionName: "markDeliveredWithEns",
+                        args: [queriedCampaignId, proofHash, senderEnsName],
+                        chainId: BASE_SEPOLIA_CHAIN_ID,
+                    }
+                    : {
+                        address: vaultAddress,
+                        abi: campaignVaultAbi,
+                        functionName: "markDelivered",
+                        args: [queriedCampaignId, proofHash],
+                        chainId: BASE_SEPOLIA_CHAIN_ID,
+                    }
         );
     }
 

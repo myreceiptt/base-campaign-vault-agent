@@ -286,4 +286,35 @@ describe("CampaignVault", function () {
     const remainingBudget = budget / 2n;
     expect(await usdc.balanceOf(advertiser.address)).to.equal(remainingBudget);
   });
+
+  it("includes ENS name bytes in calldata for *WithEns functions and emits EnsTagged", async function () {
+    const [advertiser, publisher, treasury] = await ethers.getSigners();
+
+    const MockUSDC = await ethers.getContractFactory("MockUSDC");
+    const usdc = await MockUSDC.deploy();
+
+    const CampaignVault = await ethers.getContractFactory("CampaignVault");
+    const vault = await CampaignVault.deploy(await usdc.getAddress(), treasury.address, 0);
+
+    const now = await time.latest();
+    const deadline = now + 3600;
+    const ens = "alice.eth";
+
+    const encoded = vault.interface.encodeFunctionData("createCampaignWithEns", [
+      publisher.address,
+      1n * ONE_USDC,
+      deadline,
+      ethers.ZeroHash,
+      ens,
+    ]);
+    expect(encoded.toLowerCase()).to.include(Buffer.from(ens, "utf8").toString("hex"));
+
+    await expect(
+      vault
+        .connect(advertiser)
+        .createCampaignWithEns(publisher.address, 1n * ONE_USDC, deadline, ethers.ZeroHash, ens),
+    )
+      .to.emit(vault, "EnsTagged")
+      .withArgs(1n, advertiser.address, vault.interface.getFunction("createCampaign")!.selector, ens);
+  });
 });

@@ -13,6 +13,19 @@ export const campaignVaultAbi = [
   },
   {
     type: "function",
+    name: "createCampaignWithEns",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "publisher", type: "address" },
+      { name: "budget", type: "uint256" },
+      { name: "deadline", type: "uint64" },
+      { name: "metadataHash", type: "bytes32" },
+      { name: "advertiserEnsName", type: "string" },
+    ],
+    outputs: [{ name: "campaignId", type: "uint256" }],
+  },
+  {
+    type: "function",
     name: "createCampaignWithMilestones",
     stateMutability: "nonpayable",
     inputs: [
@@ -26,9 +39,33 @@ export const campaignVaultAbi = [
   },
   {
     type: "function",
+    name: "createCampaignWithMilestonesAndEns",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "publisher", type: "address" },
+      { name: "budget", type: "uint256" },
+      { name: "deadline", type: "uint64" },
+      { name: "metadataHash", type: "bytes32" },
+      { name: "milestoneCount", type: "uint16" },
+      { name: "advertiserEnsName", type: "string" },
+    ],
+    outputs: [{ name: "campaignId", type: "uint256" }],
+  },
+  {
+    type: "function",
     name: "deposit",
     stateMutability: "nonpayable",
     inputs: [{ name: "campaignId", type: "uint256" }],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "depositWithEns",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "campaignId", type: "uint256" },
+      { name: "advertiserEnsName", type: "string" },
+    ],
     outputs: [],
   },
   {
@@ -38,6 +75,17 @@ export const campaignVaultAbi = [
     inputs: [
       { name: "campaignId", type: "uint256" },
       { name: "proofHash", type: "bytes32" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "markDeliveredWithEns",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "campaignId", type: "uint256" },
+      { name: "proofHash", type: "bytes32" },
+      { name: "publisherEnsName", type: "string" },
     ],
     outputs: [],
   },
@@ -54,6 +102,18 @@ export const campaignVaultAbi = [
   },
   {
     type: "function",
+    name: "markMilestoneDeliveredWithEns",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "campaignId", type: "uint256" },
+      { name: "proofHash", type: "bytes32" },
+      { name: "milestoneIndex", type: "uint16" },
+      { name: "publisherEnsName", type: "string" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function",
     name: "release",
     stateMutability: "nonpayable",
     inputs: [{ name: "campaignId", type: "uint256" }],
@@ -61,9 +121,29 @@ export const campaignVaultAbi = [
   },
   {
     type: "function",
+    name: "releaseWithEns",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "campaignId", type: "uint256" },
+      { name: "advertiserEnsName", type: "string" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function",
     name: "releaseMilestone",
     stateMutability: "nonpayable",
     inputs: [{ name: "campaignId", type: "uint256" }],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "releaseMilestoneWithEns",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "campaignId", type: "uint256" },
+      { name: "advertiserEnsName", type: "string" },
+    ],
     outputs: [],
   },
   {
@@ -118,9 +198,26 @@ export const campaignVaultAbi = [
   },
   {
     type: "function",
+    name: "MAX_ENS_NAME_LENGTH",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint16" }],
+  },
+  {
+    type: "function",
     name: "refund",
     stateMutability: "nonpayable",
     inputs: [{ name: "campaignId", type: "uint256" }],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "refundWithEns",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "campaignId", type: "uint256" },
+      { name: "advertiserEnsName", type: "string" },
+    ],
     outputs: [],
   },
   {
@@ -134,6 +231,17 @@ export const campaignVaultAbi = [
     outputs: [],
   },
   {
+    type: "function",
+    name: "assignPublisherWithEns",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "campaignId", type: "uint256" },
+      { name: "publisher", type: "address" },
+      { name: "advertiserEnsName", type: "string" },
+    ],
+    outputs: [],
+  },
+  {
     type: "event",
     name: "CampaignCreated",
     inputs: [
@@ -143,6 +251,17 @@ export const campaignVaultAbi = [
       { name: "budget", type: "uint256", indexed: false },
       { name: "deadline", type: "uint64", indexed: false },
       { name: "metadataHash", type: "bytes32", indexed: false },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "EnsTagged",
+    inputs: [
+      { name: "campaignId", type: "uint256", indexed: true },
+      { name: "actor", type: "address", indexed: true },
+      { name: "action", type: "bytes4", indexed: true },
+      { name: "ensName", type: "string", indexed: false },
     ],
     anonymous: false,
   },
