@@ -17,6 +17,7 @@ import {
   useEnsAddress,
   useEnsAvatar,
   useEnsName,
+  usePublicClient,
   useReadContract,
   useSwitchChain,
   useWaitForTransactionReceipt,
@@ -89,6 +90,7 @@ export default function Home() {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
   const { switchChain, isPending: isSwitching } = useSwitchChain();
+  const publicClient = usePublicClient({ chainId: BASE_SEPOLIA_CHAIN_ID });
 
   // Form state
   const [objective, setObjective] = useState("");
@@ -161,6 +163,11 @@ export default function Home() {
 
   const objectiveQuality = useMemo(() => analyzeObjective(objective), [objective]);
 
+  const derivedMilestoneCount = useMemo(() => {
+    const nonEmptyDeliverables = deliverables.map((item) => item.trim()).filter(Boolean).length;
+    return Math.min(20, Math.max(nonEmptyDeliverables || 1, 1));
+  }, [deliverables]);
+
   const budgetUnits = useMemo(() => {
     try {
       if (!budgetUsdc) return null;
@@ -224,25 +231,81 @@ export default function Home() {
       enabled: allowanceEnabled,
     },
   });
+  const allowance = allowanceQuery.data ?? BigInt(0);
+  const refetchAllowance = allowanceQuery.refetch;
+
+  const campaignIdBigInt = useMemo(() => {
+    const trimmed = campaignId.trim();
+    if (!trimmed || !/^\d+$/.test(trimmed)) return null;
+    try {
+      return BigInt(trimmed);
+    } catch {
+      return null;
+    }
+  }, [campaignId]);
 
   // Read campaign status from contract
   const campaignStatusQuery = useReadContract({
     address: vaultAddress,
     abi: campaignVaultAbi,
     functionName: "campaigns",
-    args: campaignId ? [BigInt(campaignId)] : undefined,
+    args: campaignIdBigInt !== null ? [campaignIdBigInt] : undefined,
     chainId: BASE_SEPOLIA_CHAIN_ID,
     query: {
-      enabled: Boolean(campaignId && vaultAddress),
+      enabled: Boolean(campaignIdBigInt !== null && vaultAddress),
     },
   });
+  const refetchCampaignStatus = campaignStatusQuery.refetch;
+
+  const campaignTuple = campaignStatusQuery.data as readonly unknown[] | undefined;
 
   // Parse campaign status - wagmi returns struct as tuple
   const campaignOnchainStatus = useMemo(() => {
-    if (!campaignStatusQuery.data) return 0; // NONE
+    if (!campaignTuple) return 0; // NONE
     const statusIndex = 4; // status is at index 4 in tuple
-    return Number((campaignStatusQuery.data as readonly unknown[])[statusIndex]);
-  }, [campaignStatusQuery.data]);
+    return Number(campaignTuple[statusIndex]);
+  }, [campaignTuple]);
+
+  const campaignAdvertiser = useMemo(() => {
+    const value = campaignTuple?.[0];
+    return typeof value === "string" && isAddress(value) ? (value as `0x${string}`) : null;
+  }, [campaignTuple]);
+
+  const campaignPublisher = useMemo(() => {
+    const value = campaignTuple?.[1];
+    return typeof value === "string" && isAddress(value) ? (value as `0x${string}`) : null;
+  }, [campaignTuple]);
+
+  const campaignMilestoneCount = useMemo(() => {
+    const value = Number(campaignTuple?.[7] ?? 1);
+    return Number.isFinite(value) && value > 0 ? value : 1;
+  }, [campaignTuple]);
+
+  const deliveredMilestones = useMemo(() => {
+    const value = Number(campaignTuple?.[8] ?? 0);
+    return Number.isFinite(value) && value >= 0 ? value : 0;
+  }, [campaignTuple]);
+
+  const releasedMilestones = useMemo(() => {
+    const value = Number(campaignTuple?.[9] ?? 0);
+    return Number.isFinite(value) && value >= 0 ? value : 0;
+  }, [campaignTuple]);
+
+  const isCampaignAdvertiser = useMemo(() => {
+    return Boolean(
+      address &&
+      campaignAdvertiser &&
+      address.toLowerCase() === campaignAdvertiser.toLowerCase(),
+    );
+  }, [address, campaignAdvertiser]);
+
+  const isCampaignPublisher = useMemo(() => {
+    return Boolean(
+      address &&
+      campaignPublisher &&
+      address.toLowerCase() === campaignPublisher.toLowerCase(),
+    );
+  }, [address, campaignPublisher]);
 
   const { writeContractAsync, data: lastHash, isPending, error } =
     useWriteContract();
@@ -254,6 +317,9 @@ export default function Home() {
   const createdCampaignId = useMemo(() => {
     if (!receipt.data) return null;
     for (const log of receipt.data.logs) {
+      if (vaultAddress && log.address.toLowerCase() !== vaultAddress.toLowerCase()) {
+        continue;
+      }
       try {
         const decoded = decodeEventLog({
           abi: campaignVaultAbi,
@@ -268,7 +334,7 @@ export default function Home() {
       }
     }
     return null;
-  }, [receipt.data]);
+  }, [receipt.data, vaultAddress]);
 
   useEffect(() => {
     if (createdCampaignId) {
@@ -362,6 +428,17 @@ export default function Home() {
     const deadline =
       BigInt(Math.floor(Date.now() / 1000)) + BigInt(Math.floor(days * 86400));
 
+    if (derivedMilestoneCount > 1) {
+      await writeContractAsync({
+        address: vaultAddress,
+        abi: campaignVaultAbi,
+        functionName: "createCampaignWithMilestones",
+        args: [effectivePublisher ?? zeroAddress, budgetUnits, deadline, lockedMetadataHash, derivedMilestoneCount],
+        chainId: BASE_SEPOLIA_CHAIN_ID,
+      });
+      return;
+    }
+
     await writeContractAsync({
       address: vaultAddress,
       abi: campaignVaultAbi,
@@ -375,6 +452,7 @@ export default function Home() {
     isDirtySinceLock,
     budgetUnits,
     deadlineDays,
+    derivedMilestoneCount,
     writeContractAsync,
     effectivePublisher,
   ]);
@@ -382,74 +460,120 @@ export default function Home() {
   // Combined function: approve (if needed) + deposit
   const onFundCampaign = useCallback(async () => {
     if (!vaultAddress) return;
-    if (!campaignId) throw new Error("Campaign ID required");
+    if (campaignIdBigInt === null) throw new Error("Campaign ID must be a positive integer");
     if (!budgetUnits) throw new Error("Invalid budget");
+    if (!publicClient) throw new Error("RPC client not ready");
 
     // Check if we need to approve first
-    const currentAllowance = allowanceQuery.data ?? BigInt(0);
-    if (currentAllowance < budgetUnits) {
+    if (allowance < budgetUnits) {
       // First approve
-      await writeContractAsync({
+      const approveHash = await writeContractAsync({
         address: usdcAddress,
         abi: erc20Abi,
         functionName: "approve",
         args: [vaultAddress, budgetUnits],
         chainId: BASE_SEPOLIA_CHAIN_ID,
       });
-      // Wait a bit for the approval to be indexed
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await publicClient.waitForTransactionReceipt({ hash: approveHash });
+      await refetchAllowance();
     }
 
     // Then deposit
-    await writeContractAsync({
+    const depositHash = await writeContractAsync({
       address: vaultAddress,
       abi: campaignVaultAbi,
       functionName: "deposit",
-      args: [BigInt(campaignId)],
+      args: [campaignIdBigInt],
       chainId: BASE_SEPOLIA_CHAIN_ID,
     });
+    await publicClient.waitForTransactionReceipt({ hash: depositHash });
 
     // Refetch campaign status
-    campaignStatusQuery.refetch();
+    await refetchCampaignStatus();
   }, [
     vaultAddress,
-    campaignId,
+    campaignIdBigInt,
     budgetUnits,
-    allowanceQuery.data,
+    publicClient,
+    allowance,
+    refetchAllowance,
     writeContractAsync,
     usdcAddress,
-    campaignStatusQuery,
+    refetchCampaignStatus,
   ]);
 
   const onMarkDelivered = useCallback(async () => {
     if (!vaultAddress) return;
-    if (!campaignId) throw new Error("Campaign ID required");
+    if (campaignIdBigInt === null) throw new Error("Campaign ID must be a positive integer");
+    if (!publicClient) throw new Error("RPC client not ready");
     // Generate a proof hash from timestamp + campaign id
-    const proofHash = keccak256(toHex(`proof-${campaignId}-${Date.now()}`));
-    await writeContractAsync({
-      address: vaultAddress,
-      abi: campaignVaultAbi,
-      functionName: "markDelivered",
-      args: [BigInt(campaignId), proofHash],
-      chainId: BASE_SEPOLIA_CHAIN_ID,
-    });
+    const proofHash = keccak256(toHex(`proof-${campaignIdBigInt.toString()}-${Date.now()}`));
+    const nextMilestoneIndex = deliveredMilestones + 1;
+    const markDeliveredHash = await writeContractAsync(
+      campaignMilestoneCount > 1
+        ? {
+          address: vaultAddress,
+          abi: campaignVaultAbi,
+          functionName: "markMilestoneDelivered",
+          args: [campaignIdBigInt, proofHash, nextMilestoneIndex],
+          chainId: BASE_SEPOLIA_CHAIN_ID,
+        }
+        : {
+          address: vaultAddress,
+          abi: campaignVaultAbi,
+          functionName: "markDelivered",
+          args: [campaignIdBigInt, proofHash],
+          chainId: BASE_SEPOLIA_CHAIN_ID,
+        },
+    );
+    await publicClient.waitForTransactionReceipt({ hash: markDeliveredHash });
     // Refetch campaign status
-    campaignStatusQuery.refetch();
-  }, [vaultAddress, campaignId, writeContractAsync, campaignStatusQuery]);
+    await refetchCampaignStatus();
+  }, [
+    vaultAddress,
+    campaignIdBigInt,
+    publicClient,
+    writeContractAsync,
+    refetchCampaignStatus,
+    campaignMilestoneCount,
+    deliveredMilestones,
+  ]);
 
   const onRelease = useCallback(async () => {
     if (!vaultAddress) return;
-    if (!campaignId) throw new Error("Campaign ID required");
-    await writeContractAsync({
-      address: vaultAddress,
-      abi: campaignVaultAbi,
-      functionName: "release",
-      args: [BigInt(campaignId)],
-      chainId: BASE_SEPOLIA_CHAIN_ID,
-    });
+    if (campaignIdBigInt === null) throw new Error("Campaign ID must be a positive integer");
+    if (!publicClient) throw new Error("RPC client not ready");
+    const hasUnreleasedMilestones =
+      campaignMilestoneCount > 1 && releasedMilestones < campaignMilestoneCount;
+    const releaseHash = await writeContractAsync(
+      hasUnreleasedMilestones
+        ? {
+          address: vaultAddress,
+          abi: campaignVaultAbi,
+          functionName: "releaseMilestone",
+          args: [campaignIdBigInt],
+          chainId: BASE_SEPOLIA_CHAIN_ID,
+        }
+        : {
+          address: vaultAddress,
+          abi: campaignVaultAbi,
+          functionName: "release",
+          args: [campaignIdBigInt],
+          chainId: BASE_SEPOLIA_CHAIN_ID,
+        },
+    );
+    await publicClient.waitForTransactionReceipt({ hash: releaseHash });
     // Refetch campaign status
-    campaignStatusQuery.refetch();
-  }, [vaultAddress, campaignId, writeContractAsync, campaignStatusQuery]);
+    await refetchCampaignStatus();
+  }, [
+    vaultAddress,
+    campaignIdBigInt,
+    publicClient,
+    writeContractAsync,
+    refetchCampaignStatus,
+    campaignMilestoneCount,
+    releasedMilestones,
+  ]);
 
   // Smart button logic - determine what action to show
   const smartButtonConfig = useMemo(() => {
@@ -458,9 +582,17 @@ export default function Home() {
       return {
         label: "Create Campaign",
         onClick: onCreateCampaign,
-        disabled: !canTransact || !budgetUnits || !currentMetadataHash || !effectivePublisher,
+        disabled:
+          !canTransact ||
+          !budgetUnits ||
+          !effectivePublisher ||
+          !lockedMetadataHash ||
+          isDirtySinceLock,
       };
     }
+
+    const nextMilestoneToDeliver = Math.min(campaignMilestoneCount, deliveredMilestones + 1);
+    const nextMilestoneToRelease = Math.min(campaignMilestoneCount, releasedMilestones + 1);
 
     // Campaign exists - check status
     switch (campaignOnchainStatus) {
@@ -468,19 +600,44 @@ export default function Home() {
         return {
           label: "Fund Campaign",
           onClick: onFundCampaign,
-          disabled: !canTransact,
+          disabled:
+            !canTransact ||
+            !isCampaignAdvertiser ||
+            !lockedMetadataHash ||
+            isDirtySinceLock,
         };
       case CAMPAIGN_STATUS.DEPOSITED:
+        if (campaignMilestoneCount > 1) {
+          if (deliveredMilestones > releasedMilestones) {
+            return {
+              label: `Release Milestone ${nextMilestoneToRelease}/${campaignMilestoneCount}`,
+              onClick: onRelease,
+              disabled: !canTransact || !isCampaignAdvertiser,
+            };
+          }
+          return {
+            label: `Mark Milestone ${nextMilestoneToDeliver}/${campaignMilestoneCount} Delivered`,
+            onClick: onMarkDelivered,
+            disabled: !canTransact || !isCampaignPublisher,
+          };
+        }
         return {
           label: "Mark Delivered",
           onClick: onMarkDelivered,
-          disabled: !canTransact,
+          disabled: !canTransact || !isCampaignPublisher,
         };
       case CAMPAIGN_STATUS.DELIVERED:
+        if (campaignMilestoneCount > 1 && releasedMilestones < campaignMilestoneCount) {
+          return {
+            label: `Release Milestone ${nextMilestoneToRelease}/${campaignMilestoneCount}`,
+            onClick: onRelease,
+            disabled: !canTransact || !isCampaignAdvertiser,
+          };
+        }
         return {
           label: "Release Payment",
           onClick: onRelease,
-          disabled: !canTransact,
+          disabled: !canTransact || !isCampaignAdvertiser,
         };
       case CAMPAIGN_STATUS.RELEASED:
         return {
@@ -498,16 +655,27 @@ export default function Home() {
         return {
           label: "Create Campaign",
           onClick: onCreateCampaign,
-          disabled: !canTransact || !budgetUnits || !currentMetadataHash || !effectivePublisher,
+          disabled:
+            !canTransact ||
+            !budgetUnits ||
+            !effectivePublisher ||
+            !lockedMetadataHash ||
+            isDirtySinceLock,
         };
     }
   }, [
     campaignId,
     campaignOnchainStatus,
+    campaignMilestoneCount,
+    deliveredMilestones,
+    releasedMilestones,
     canTransact,
     budgetUnits,
-    currentMetadataHash,
     effectivePublisher,
+    isCampaignAdvertiser,
+    isCampaignPublisher,
+    lockedMetadataHash,
+    isDirtySinceLock,
     onCreateCampaign,
     onFundCampaign,
     onMarkDelivered,
@@ -975,6 +1143,12 @@ export default function Home() {
                   <p className="text-xs font-mono text-gray-500 break-all">
                     {lockedMetadataHash ?? currentMetadataHash ?? "—"}
                   </p>
+                  <p className="mt-1 text-xs text-gray-500">
+                    Milestones (derived): {derivedMilestoneCount}
+                    {campaignId && campaignMilestoneCount > 0
+                      ? ` • Onchain ${campaignMilestoneCount} • Delivered ${deliveredMilestones} • Released ${releasedMilestones}`
+                      : ""}
+                  </p>
                 </div>
               </div>
 
@@ -1055,7 +1229,7 @@ export default function Home() {
                 {(!campaignId || campaignOnchainStatus !== CAMPAIGN_STATUS.CREATED) && (
                   <ActionButton
                     label={smartButtonConfig.label}
-                    disabled={smartButtonConfig.disabled || !lockedMetadataHash || isDirtySinceLock}
+                    disabled={smartButtonConfig.disabled}
                     busy={isPending}
                     onClick={smartButtonConfig.onClick}
                   />

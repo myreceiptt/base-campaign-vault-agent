@@ -145,6 +145,9 @@ export function CampaignStatusTracker() {
             status: Number((campaignData as readonly unknown[])[4]),
             metadataHash: (campaignData as readonly unknown[])[5] as `0x${string}`,
             proofHash: (campaignData as readonly unknown[])[6] as `0x${string}`,
+            milestoneCount: Number((campaignData as readonly unknown[])[7] ?? 1),
+            deliveredMilestones: Number((campaignData as readonly unknown[])[8] ?? 0),
+            releasedMilestones: Number((campaignData as readonly unknown[])[9] ?? 0),
         }
         : undefined;
 
@@ -191,15 +194,13 @@ export function CampaignStatusTracker() {
     // Check if campaign was refunded (special branch)
     const wasRefunded = currentStatus === CampaignStatus.REFUNDED;
 
-    // Check if current user can mark as delivered 
-    // For demo: allow both publisher AND advertiser (same wallet testing)
-    // In production, this should only be the publisher
+    // Only publisher can mark a campaign as delivered (matches contract authorization).
     const isPublisher = address && campaign && campaign.publisher.toLowerCase() === address.toLowerCase();
-    const isAdvertiser = address && campaign && campaign.advertiser.toLowerCase() === address.toLowerCase();
     const canMarkDelivered =
         campaign &&
         currentStatus === CampaignStatus.DEPOSITED &&
-        (isPublisher || isAdvertiser); // Allow either for demo
+        campaign.deliveredMilestones < campaign.milestoneCount &&
+        isPublisher;
 
     // Refetch after delivery confirmation to sync updated status
     useEffect(() => {
@@ -209,18 +210,29 @@ export function CampaignStatusTracker() {
     }, [isDeliveryConfirmed, currentStatus, refetch]);
 
     async function handleMarkDelivered() {
-        if (!vaultAddress || !queriedCampaignId) return;
+        if (!vaultAddress || !queriedCampaignId || !campaign) return;
 
         // Generate a proof hash from timestamp + campaign id
         const proofHash = keccak256(toHex(`proof-${queriedCampaignId}-${Date.now()}`));
+        const nextMilestone = campaign.deliveredMilestones + 1;
 
-        markDelivered({
-            address: vaultAddress,
-            abi: campaignVaultAbi,
-            functionName: "markDelivered",
-            args: [queriedCampaignId, proofHash],
-            chainId: BASE_SEPOLIA_CHAIN_ID,
-        });
+        markDelivered(
+            campaign.milestoneCount > 1
+                ? {
+                    address: vaultAddress,
+                    abi: campaignVaultAbi,
+                    functionName: "markMilestoneDelivered",
+                    args: [queriedCampaignId, proofHash, nextMilestone],
+                    chainId: BASE_SEPOLIA_CHAIN_ID,
+                }
+                : {
+                    address: vaultAddress,
+                    abi: campaignVaultAbi,
+                    functionName: "markDelivered",
+                    args: [queriedCampaignId, proofHash],
+                    chainId: BASE_SEPOLIA_CHAIN_ID,
+                }
+        );
     }
 
     function handleSearch() {
@@ -420,7 +432,9 @@ export function CampaignStatusTracker() {
                                 <div>
                                     <p className="font-medium text-purple-400">Ready to mark as delivered?</p>
                                     <p className="text-sm text-gray-400 mt-1">
-                                        Confirm that you have completed the campaign deliverables
+                                        {campaign?.milestoneCount && campaign.milestoneCount > 1
+                                            ? `Confirm milestone ${campaign.deliveredMilestones + 1}/${campaign.milestoneCount} is complete`
+                                            : "Confirm that you have completed the campaign deliverables"}
                                     </p>
                                 </div>
                                 <Button
@@ -441,7 +455,9 @@ export function CampaignStatusTracker() {
                                     ) : (
                                         <>
                                             <Package className="w-4 h-4 mr-2" />
-                                            Mark Delivered
+                                            {campaign?.milestoneCount && campaign.milestoneCount > 1
+                                                ? `Mark Milestone ${campaign.deliveredMilestones + 1}`
+                                                : "Mark Delivered"}
                                         </>
                                     )}
                                 </Button>
@@ -541,6 +557,12 @@ export function CampaignStatusTracker() {
                             <p className="text-xs text-gray-500 mb-1">Deadline</p>
                             <p className="text-sm text-gray-300">
                                 {formatDeadline(campaign.deadline)}
+                            </p>
+                        </div>
+                        <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+                            <p className="text-xs text-gray-500 mb-1">Milestones</p>
+                            <p className="text-sm text-gray-300">
+                                {campaign.milestoneCount} total • {campaign.deliveredMilestones} delivered • {campaign.releasedMilestones} released
                             </p>
                         </div>
                     </div>
