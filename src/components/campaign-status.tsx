@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useReadContract, useWriteContract, useWaitForTransactionReceipt, useAccount } from "wagmi";
-import { formatUnits, keccak256, toHex } from "viem";
+import Image from "next/image";
+import { useReadContract, useWriteContract, useWaitForTransactionReceipt, useAccount, useEnsName, useEnsAvatar } from "wagmi";
+import { mainnet } from "wagmi/chains";
+import { formatUnits, keccak256, toHex, zeroAddress } from "viem";
 import {
     Search,
     CheckCircle,
@@ -15,6 +17,7 @@ import {
     RefreshCw,
     ExternalLink,
     Loader2,
+    User,
 } from "lucide-react";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
@@ -80,6 +83,20 @@ const LIFECYCLE_STEPS = [
     { status: CampaignStatus.RELEASED, label: "Released", icon: Send },
 ];
 
+function toCampaignStatus(value: number): CampaignStatus {
+    switch (value) {
+        case CampaignStatus.NONE:
+        case CampaignStatus.CREATED:
+        case CampaignStatus.DEPOSITED:
+        case CampaignStatus.DELIVERED:
+        case CampaignStatus.RELEASED:
+        case CampaignStatus.REFUNDED:
+            return value;
+        default:
+            return CampaignStatus.NONE;
+    }
+}
+
 export function CampaignStatusTracker() {
     const [campaignIdInput, setCampaignIdInput] = useState("");
     const [queriedCampaignId, setQueriedCampaignId] = useState<bigint | null>(null);
@@ -131,9 +148,45 @@ export function CampaignStatusTracker() {
         }
         : undefined;
 
-    const currentStatus = campaign?.status ?? CampaignStatus.NONE;
-    const statusConfig = STATUS_CONFIG[currentStatus as CampaignStatus];
+    const currentStatus = toCampaignStatus(campaign?.status ?? CampaignStatus.NONE);
+    const statusConfig = STATUS_CONFIG[currentStatus];
     const StatusIcon = statusConfig.icon;
+    const advertiserAddress =
+        campaign && campaign.advertiser !== zeroAddress ? campaign.advertiser : undefined;
+    const publisherAddress =
+        campaign && campaign.publisher !== zeroAddress ? campaign.publisher : undefined;
+
+    // ENS resolution for advertiser (mainnet where ENS names are registered)
+    const { data: advertiserEnsName } = useEnsName({
+        address: advertiserAddress,
+        chainId: mainnet.id,
+        query: {
+            enabled: Boolean(advertiserAddress),
+        },
+    });
+    const { data: advertiserEnsAvatar } = useEnsAvatar({
+        name: advertiserEnsName ?? undefined,
+        chainId: mainnet.id,
+        query: {
+            enabled: Boolean(advertiserEnsName),
+        },
+    });
+
+    // ENS resolution for publisher
+    const { data: publisherEnsName } = useEnsName({
+        address: publisherAddress,
+        chainId: mainnet.id,
+        query: {
+            enabled: Boolean(publisherAddress),
+        },
+    });
+    const { data: publisherEnsAvatar } = useEnsAvatar({
+        name: publisherEnsName ?? undefined,
+        chainId: mainnet.id,
+        query: {
+            enabled: Boolean(publisherEnsName),
+        },
+    });
 
     // Check if campaign was refunded (special branch)
     const wasRefunded = currentStatus === CampaignStatus.REFUNDED;
@@ -172,15 +225,22 @@ export function CampaignStatusTracker() {
 
     function handleSearch() {
         const trimmed = campaignIdInput.trim();
-        if (/^\d+$/.test(trimmed)) {
-            const id = BigInt(trimmed);
-            if (id > BigInt(0)) {
-                setQueriedCampaignId(id);
-            }
+        if (!/^\d+$/.test(trimmed)) {
+            setQueriedCampaignId(null);
+            return;
         }
+
+        const id = BigInt(trimmed);
+        if (id <= BigInt(0)) {
+            setQueriedCampaignId(null);
+            return;
+        }
+
+        setQueriedCampaignId(id);
     }
 
     function formatAddress(addr: string) {
+        if (addr.length < 10) return addr;
         return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
     }
 
@@ -410,19 +470,66 @@ export function CampaignStatusTracker() {
 
                     {/* Campaign Details */}
                     <div className="grid gap-4 sm:grid-cols-2">
+                        {/* Advertiser with ENS */}
                         <div className="p-3 rounded-lg bg-white/5 border border-white/10">
-                            <p className="text-xs text-gray-500 mb-1">Advertiser</p>
-                            <p className="font-mono text-sm text-gray-300">
-                                {formatAddress(campaign.advertiser)}
-                            </p>
+                            <p className="text-xs text-gray-500 mb-2">Advertiser</p>
+                            <div className="flex items-center gap-3">
+                                {advertiserEnsAvatar ? (
+                                    <Image
+                                        src={advertiserEnsAvatar}
+                                        alt="Advertiser Avatar"
+                                        width={32}
+                                        height={32}
+                                        unoptimized
+                                        className="w-8 h-8 rounded-full"
+                                    />
+                                ) : (
+                                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#0052FF] to-[#1CD8D2] flex items-center justify-center">
+                                        <User className="w-4 h-4 text-white" />
+                                    </div>
+                                )}
+                                <div>
+                                    {advertiserEnsName ? (
+                                        <p className="font-medium text-emerald-400">{advertiserEnsName}</p>
+                                    ) : null}
+                                    <p className="font-mono text-xs text-gray-400">
+                                        {formatAddress(campaign.advertiser)}
+                                    </p>
+                                </div>
+                            </div>
                         </div>
+
+                        {/* Publisher with ENS */}
                         <div className="p-3 rounded-lg bg-white/5 border border-white/10">
-                            <p className="text-xs text-gray-500 mb-1">Publisher</p>
-                            <p className="font-mono text-sm text-gray-300">
-                                {campaign.publisher === "0x0000000000000000000000000000000000000000"
-                                    ? "Not assigned"
-                                    : formatAddress(campaign.publisher)}
-                            </p>
+                            <p className="text-xs text-gray-500 mb-2">Publisher</p>
+                            {campaign.publisher === zeroAddress ? (
+                                <p className="text-sm text-gray-500">Not assigned</p>
+                            ) : (
+                                <div className="flex items-center gap-3">
+                                    {publisherEnsAvatar ? (
+                                        <Image
+                                            src={publisherEnsAvatar}
+                                            alt="Publisher Avatar"
+                                            width={32}
+                                            height={32}
+                                            unoptimized
+                                            className="w-8 h-8 rounded-full"
+                                        />
+                                    ) : (
+                                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+                                            <User className="w-4 h-4 text-white" />
+                                        </div>
+                                    )}
+                                    <div>
+                                        {publisherEnsName ? (
+                                            <p className="font-medium text-emerald-400">{publisherEnsName}</p>
+                                        ) : null}
+                                        <p className="font-mono text-xs text-gray-400">
+                                            {formatAddress(campaign.publisher)}
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                         <div className="p-3 rounded-lg bg-white/5 border border-white/10">
                             <p className="text-xs text-gray-500 mb-1">Budget</p>

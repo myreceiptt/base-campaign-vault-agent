@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { ConnectButton as RainbowConnectButton } from "@rainbow-me/rainbowkit";
 import { useEnsAvatar, useEnsName } from "wagmi";
 import { sepolia } from "wagmi/chains";
@@ -92,9 +93,12 @@ function ConnectButtonContent({
                                 style={{ background: chain.iconBackground }}
                             >
                                 {chain.iconUrl && (
-                                    <img
+                                    <Image
                                         alt={chain.name ?? "Chain icon"}
                                         src={chain.iconUrl}
+                                        width={20}
+                                        height={20}
+                                        unoptimized
                                         className="w-5 h-5"
                                     />
                                 )}
@@ -109,9 +113,12 @@ function ConnectButtonContent({
                         className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 transition"
                     >
                         {displayAvatar && (
-                            <img
+                            <Image
                                 src={displayAvatar}
                                 alt="ENS Avatar"
+                                width={24}
+                                height={24}
+                                unoptimized
                                 className="w-6 h-6 rounded-full"
                             />
                         )}

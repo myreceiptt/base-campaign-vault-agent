@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { forwardRef, useState, useEffect, useCallback } from "react";
 import { useEnsAddress, useEnsName, useEnsAvatar } from "wagmi";
 import { isAddress } from "viem";
@@ -101,6 +102,12 @@ export const ENSInput = forwardRef<HTMLInputElement, ENSInputProps>(
             return () => clearTimeout(timer);
         }, [inputValue]);
 
+        // Keep internal input state in sync with external value updates.
+        useEffect(() => {
+            setInputValue(value);
+            setDebouncedValue(value);
+        }, [value]);
+
         // Notify parent of resolved address
         useEffect(() => {
             if (resolvedAddress) {
@@ -156,9 +163,12 @@ export const ENSInput = forwardRef<HTMLInputElement, ENSInputProps>(
                     {/* Left icon / Avatar */}
                     <div className="absolute left-3 top-1/2 -translate-y-1/2">
                         {ensAvatar ? (
-                            <img
+                            <Image
                                 src={ensAvatar}
                                 alt="ENS Avatar"
+                                width={24}
+                                height={24}
+                                unoptimized
                                 className="w-6 h-6 rounded-full object-cover"
                             />
                         ) : (

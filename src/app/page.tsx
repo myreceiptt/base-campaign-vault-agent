@@ -793,9 +793,12 @@ export default function Home() {
                         {isConnected && (
                           <div className="flex items-center gap-3 p-3 rounded-lg bg-white/5 border border-white/10">
                             {advertiserEnsAvatar ? (
-                              <img
+                              <Image
                                 src={advertiserEnsAvatar}
                                 alt="Your ENS Avatar"
+                                width={32}
+                                height={32}
+                                unoptimized
                                 className="w-8 h-8 rounded-full"
                               />
                             ) : (
@@ -852,6 +855,19 @@ export default function Home() {
                   </motion.div>
                 )}
               </AnimatePresence>
+
+              {/* AI Content Generator - Only show when brief is locked */}
+              {lockedMetadataHash && (
+                <ContentGenerator
+                  brief={aiBrief}
+                  deliverables={deliverables}
+                  objective={objective}
+                  audience={audience}
+                  tone={tone}
+                  cta={cta}
+                  isLocked={!!lockedMetadataHash}
+                />
+              )}
             </div>
           </div>
         </main>
@@ -898,9 +914,12 @@ export default function Home() {
                         {isEnsName && resolvedPublisherAddress && (
                           <div className="flex items-center gap-2 text-emerald-400">
                             {publisherEnsAvatar && (
-                              <img
+                              <Image
                                 src={publisherEnsAvatar}
                                 alt="ENS Avatar"
+                                width={20}
+                                height={20}
+                                unoptimized
                                 className="w-5 h-5 rounded-full"
                               />
                             )}
@@ -1094,19 +1113,6 @@ export default function Home() {
         {/* Campaign Status Tracker Section */}
         <section className="mx-auto max-w-6xl px-6 pb-8">
           <CampaignStatusTracker />
-        </section>
-
-        {/* AI Content Generator Section */}
-        <section className="mx-auto max-w-6xl px-6 pb-8">
-          <ContentGenerator
-            brief={aiBrief}
-            deliverables={deliverables}
-            objective={objective}
-            audience={audience}
-            tone={tone}
-            cta={cta}
-            isLocked={!!lockedMetadataHash}
-          />
         </section>
 
         {/* Footer */}
