@@ -70,15 +70,22 @@ function normalizeGeneratedContent(raw: unknown): GeneratedContent {
         throw new Error("LLM returned empty posts");
     }
 
+    const bulletPoints = landing.bulletPoints.map((point) => String(point).trim()).filter(Boolean);
+    const announcementThread = parsed.announcementThread.map((item) => String(item).trim()).filter(Boolean);
+
+    if (bulletPoints.length === 0 || announcementThread.length === 0) {
+        throw new Error("LLM returned empty landing or thread content");
+    }
+
     return {
         posts,
         landingCopy: {
             headline: landing.headline,
             subheadline: landing.subheadline,
-            bulletPoints: landing.bulletPoints.map((point) => String(point)),
+            bulletPoints,
             ctaButton: landing.ctaButton,
         },
-        announcementThread: parsed.announcementThread.map((item) => String(item)),
+        announcementThread,
     };
 }
 
@@ -145,6 +152,19 @@ type LlmClient = {
     generateContent: (req: ContentRequest) => Promise<GeneratedContent>;
 };
 
+function parseJsonObjectContent(content: string): unknown {
+    try {
+        return JSON.parse(content);
+    } catch {
+        const start = content.indexOf("{");
+        const end = content.lastIndexOf("}");
+        if (start === -1 || end === -1 || end <= start) {
+            throw new Error("LLM did not return valid JSON");
+        }
+        return JSON.parse(content.slice(start, end + 1));
+    }
+}
+
 function createLlmClient(): LlmClient | null {
     const apiKey = process.env.LLM_API_KEY;
     if (!apiKey) return null;
@@ -152,6 +172,7 @@ function createLlmClient(): LlmClient | null {
     const provider = (process.env.LLM_PROVIDER ?? "openai-compatible").toLowerCase();
     const apiUrl = process.env.LLM_API_URL ?? "https://api.openai.com/v1/chat/completions";
     const model = process.env.LLM_MODEL ?? "gpt-4o-mini";
+    const timeoutMs = Number(process.env.LLM_TIMEOUT_MS ?? "20000");
 
     if (provider !== "openai-compatible") {
         return null;
@@ -201,14 +222,27 @@ Deliverables: ${req.deliverables.join(", ")}`;
                 ],
             };
 
-            const res = await fetch(apiUrl, {
-                method: "POST",
-                headers: {
-                    "content-type": "application/json",
-                    authorization: `Bearer ${apiKey}`,
-                },
-                body: JSON.stringify(payload),
-            });
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), timeoutMs);
+            let res: Response;
+            try {
+                res = await fetch(apiUrl, {
+                    method: "POST",
+                    headers: {
+                        "content-type": "application/json",
+                        authorization: `Bearer ${apiKey}`,
+                    },
+                    body: JSON.stringify(payload),
+                    signal: controller.signal,
+                });
+            } catch (err) {
+                if ((err as Error).name === "AbortError") {
+                    throw new Error(`LLM request timed out after ${timeoutMs}ms`);
+                }
+                throw err;
+            } finally {
+                clearTimeout(timeout);
+            }
 
             if (!res.ok) {
                 const text = await res.text().catch(() => "");
@@ -219,7 +253,7 @@ Deliverables: ${req.deliverables.join(", ")}`;
                 choices?: Array<{ message?: { content?: string } }>;
             };
             const content = data.choices?.[0]?.message?.content ?? "";
-            const parsed = JSON.parse(content) as unknown;
+            const parsed = parseJsonObjectContent(content) as unknown;
             return normalizeGeneratedContent(parsed);
         },
     };
