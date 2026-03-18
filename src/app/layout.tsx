@@ -20,6 +20,11 @@ export const metadata: Metadata = {
   icons: {
     icon: "/logo-new.png",
   },
+
+  other: {
+    "talentapp:project_verification":
+      "4ad9f659e345183da07bd0a42ae805eac4d4e49af9587bdf324f0881b81b8d1e2a708794dc463c046d9c28535bfdea7c138df41336fa359d4a934c78835ba8b7",
+  },
 };
 
 export default function RootLayout({
@@ -30,8 +35,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <Providers>
           <ToastProvider>{children}</ToastProvider>
         </Providers>
